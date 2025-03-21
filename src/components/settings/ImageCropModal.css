@@ -1,0 +1,25 @@
+.crop-container {
+  /* Remove default border */
+  --ReactCrop-border-color: transparent;
+  --ReactCrop-crop-area-border-color: rgba(255, 255, 255, 0.4);
+  
+  /* Modern circular overlay */
+  --ReactCrop-overlay-color: rgba(0, 0, 0, 0.7);
+  
+  /* Ensure perfect circle */
+  --ReactCrop-width: 100%;
+  --ReactCrop-height: 100%;
+}
+
+/* Style the circular crop area */
+.ReactCrop__crop-selection {
+  border: 2px solid rgba(255, 255, 255, 0.4) !important;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7);
+  border-radius: 50% !important;
+}
+
+/* Hide the drag handles */
+.ReactCrop__drag-handle {
+  background-color: transparent !important;
+  border: none !important;
+}

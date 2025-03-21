@@ -1,16 +1,19 @@
-import { Home, MessageSquare, Clock, Building2, LogOut } from 'lucide-react';
+import { Home, MessageSquare, Clock, Building2, LogOut, Settings as SettingsIcon, Shield } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/useAuth';
+import { useRole } from '../hooks/useRole';
 
 export default function Sidebar() {
   const location = useLocation();
   const { signOut } = useAuth();
+  const { isAdmin } = useRole();
 
   const links = [
     { icon: Home, label: 'Dashboard', path: '/dashboard' },
     { icon: Building2, label: 'Business', path: '/business' },
     { icon: Clock, label: 'Time Clock', path: '/time-clock' },
     { icon: MessageSquare, label: 'Chat', path: '/chat' },
+    { icon: SettingsIcon, label: 'Settings', path: '/settings' },
   ];
 
   return (
@@ -43,6 +46,22 @@ export default function Sidebar() {
           })}
         </ul>
       </nav>
+      
+      {isAdmin && (
+        <div className="mb-4">
+          <Link
+            to="/admin"
+            className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+              location.pathname === '/admin'
+                ? 'bg-purple-500 text-white'
+                : 'text-gray-300 hover:bg-light-blue'
+            }`}
+          >
+            <Shield className="w-5 h-5" />
+            Admin Settings
+          </Link>
+        </div>
+      )}
 
       <button
         onClick={() => signOut()}

@@ -1,6 +1,6 @@
 import { Bell } from 'lucide-react';
 import { useAuth } from '../contexts/useAuth';
-
+import { Avatar } from './Avatar';
 
 export default function Navbar() {
   const { user } = useAuth();
@@ -13,9 +13,7 @@ export default function Navbar() {
           <Bell className="w-5 h-5" />
         </button>
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-neon-blue flex items-center justify-center">
-            {user?.email?.[0].toUpperCase()}
-          </div>
+          <Avatar />
         </div>
       </div>
     </nav>

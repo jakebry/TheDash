@@ -2,6 +2,8 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/useAuth';
 import Login from '../pages/Login';
 import Layout from '../components/Layout';
+import Settings from '../pages/Settings';
+import AdminSettings from '../pages/AdminSettings';
 
 export default function AppRoutes() {
   const { user, loading } = useAuth();
@@ -59,6 +61,26 @@ export default function AppRoutes() {
             <Layout>
               <div>Chat</div>
             </Layout>
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          user ? (
+            <Settings />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route
+        path="/admin"
+        element={
+          user ? (
+            <AdminSettings />
           ) : (
             <Navigate to="/login" replace />
           )
