@@ -2,11 +2,16 @@ import { createContext, useEffect, useState } from "react";
 import { User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 
+interface SignUpOptions {
+  full_name: string;
+  role: "admin" | "business" | "user";
+}
+
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, options: SignUpOptions) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -40,10 +45,33 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (data.user) setUser(data.user);
   };
 
-  const signUp = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signUp({ email, password });
+  const signUp = async (email: string, password: string, options: SignUpOptions) => {
+    const { full_name, role } = options;
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name,
+          role,
+        },
+      },
+    });
+
     if (error) throw error;
-    if (data.user) setUser(data.user);
+
+    const newUser = data.user;
+    if (newUser) {
+      setUser(newUser);
+
+      // Optional: create a matching profile row
+      await supabase.from("profiles").upsert({
+        id: newUser.id,
+        full_name,
+        role, // keep if you want to show this in admin UI
+      });
+    }
   };
 
   const signOut = async () => {

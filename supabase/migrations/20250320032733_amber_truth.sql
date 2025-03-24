@@ -19,19 +19,20 @@
     - Set up policies for different role access
     - Secure chat messages within business context
 */
+-- Create profiles table
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id uuid PRIMARY KEY REFERENCES auth.users(id),
+  full_name text,
+  avatar_url text,
+  role text DEFAULT 'user',
+  created_at timestamptz DEFAULT now()
+);
+
 
 -- Create custom types for roles
 CREATE TYPE user_role AS ENUM ('admin', 'business', 'user');
 
--- Create profiles table
-CREATE TABLE profiles (
-  id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  full_name text,
-  avatar_url text,
-  role user_role DEFAULT 'user'::user_role,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
-);
+
 
 -- Create businesses table
 CREATE TABLE businesses (
@@ -80,6 +81,17 @@ ALTER TABLE businesses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE business_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE time_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Logged in users can access their profile"
+  ON public.profiles FOR SELECT USING (auth.uid() = id);
+
+CREATE POLICY "Logged in users can insert their profile"
+  ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "Logged in users can update their profile"
+  ON public.profiles FOR UPDATE USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
+
 
 -- Profiles policies
 CREATE POLICY "Public profiles are viewable by users in same business" ON profiles
@@ -177,7 +189,25 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Triggers
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+-- Create the function that runs on new users
+create or replace function public.handle_new_user()
+returns trigger as $$
+begin
+  insert into public.profiles (id, full_name, avatar_url)
+  values (
+    new.id,
+    new.raw_user_meta_data->>'full_name',
+    new.raw_user_meta_data->>'avatar_url'
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$ language plpgsql security definer;
+
+-- Create the trigger if it doesn't exist
+drop trigger if exists on_auth_user_created on auth.users;
+
+create trigger on_auth_user_created
+after insert on auth.users
+for each row
+execute procedure public.handle_new_user();

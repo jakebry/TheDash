@@ -3,6 +3,7 @@ import { Settings as SettingsIcon, X, Upload } from 'lucide-react';
 import { useAuth } from '../contexts/useAuth';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
+import { PromoteToAdminButton } from './admin/PromoteToAdminButton';
 
 export default function Settings() {
   const [isOpen, setIsOpen] = useState(false);
@@ -66,6 +67,7 @@ export default function Settings() {
       console.error(error);
     }
   };
+  console.log('Logged in as:', user?.email);
 
   return (
     <>
@@ -147,6 +149,11 @@ export default function Settings() {
               >
                 Save Changes
               </button>
+
+              {/* Admin promotion button (visible only to you) */}
+              <div className="pt-4">
+                <PromoteToAdminButton />
+              </div>
             </div>
           </div>
         </div>

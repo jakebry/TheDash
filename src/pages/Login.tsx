@@ -115,14 +115,12 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       toast.error('Please enter a valid email address');
       return;
     }
 
-    // Password validation
     if (password.length < 6) {
       toast.error('Password must be at least 6 characters long');
       return;
@@ -135,7 +133,6 @@ export default function Login() {
 
     try {
       if (isSignUp) {
-        // Validation
         if (password !== confirmPassword) {
           toast.error("Passwords don't match");
           return;
@@ -146,9 +143,12 @@ export default function Login() {
           return;
         }
 
-        await signUp(email, password);
+        await signUp(email, password, {
+          full_name: fullName,
+          role: 'user' // or 'business', or 'admin' depending on default logic
+        });
+        
         toast.success('Account created successfully! You can now sign in.');
-        // Reset the form and go back to sign in
         toggleMode(false);
       } else {
         await signIn(email, password);

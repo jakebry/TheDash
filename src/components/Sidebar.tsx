@@ -5,8 +5,8 @@ import { useRole } from '../hooks/useRole';
 
 export default function Sidebar() {
   const location = useLocation();
-  const { signOut } = useAuth();
-  const { isAdmin } = useRole();
+  const { user, signOut } = useAuth();
+  const { role } = useRole(user?.id ?? null);
 
   const links = [
     { icon: Home, label: 'Dashboard', path: '/dashboard' },
@@ -47,7 +47,7 @@ export default function Sidebar() {
         </ul>
       </nav>
       
-      {isAdmin && (
+      {role === 'admin' && (
         <div className="mb-4">
           <Link
             to="/admin"
