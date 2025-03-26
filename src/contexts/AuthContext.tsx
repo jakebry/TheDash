@@ -1,6 +1,7 @@
 import { createContext, useEffect, useState } from "react";
 import { User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
+import toast from 'react-hot-toast';
 
 interface SignUpOptions {
   full_name: string;
@@ -52,9 +53,9 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       email,
       password,
       options: {
-        data: {
+        data: { 
           full_name,
-          role,
+          role // Include role in metadata to help with RLS policies
         },
       },
     });
@@ -62,16 +63,15 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (error) throw error;
 
     const newUser = data.user;
-    if (newUser) {
-      setUser(newUser);
-
-      // Optional: create a matching profile row
-      await supabase.from("profiles").upsert({
-        id: newUser.id,
-        full_name,
-        role, // keep if you want to show this in admin UI
-      });
-    }
+    if (!newUser) throw new Error('Failed to create user');
+    
+    // Wait a moment for the trigger to create the profile
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Now sign in with the new credentials
+    await signIn(email, password);
+    
+    toast.success('Account created successfully!');
   };
 
   const signOut = async () => {

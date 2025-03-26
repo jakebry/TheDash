@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { X } from 'lucide-react';
 import ReactCrop, { type Crop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
+import './ImageCropModal.css';
 
 interface ImageCropModalProps {
   imageUrl: string;
@@ -19,6 +20,7 @@ export function ImageCropModal({ imageUrl, onClose, onSave }: ImageCropModalProp
     y: 5,
   });
   const imgRef = useRef<HTMLImageElement>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const handleSave = () => {
     if (!imgRef.current || !completedCrop) return;
@@ -49,6 +51,10 @@ export function ImageCropModal({ imageUrl, onClose, onSave }: ImageCropModalProp
     }, 'image/png');
   };
 
+  const handleImageLoad = () => {
+    setIsLoading(false);
+  };
+
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
       <div className="bg-highlight-blue p-6 rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
@@ -62,27 +68,36 @@ export function ImageCropModal({ imageUrl, onClose, onSave }: ImageCropModalProp
           </button>
         </div>
         
-        <div className="mb-4">
-          <ReactCrop
-            crop={crop}
-            onChange={c => setCrop(c)}
-            onComplete={c => setCompletedCrop(c)}
-            aspect={1}
-            circularCrop
-            minWidth={100}
-            minHeight={100}
-            className="crop-container"
-          >
-            <img
-              ref={imgRef}
-              src={imageUrl}
-              alt="Crop preview"
-              className="max-w-full h-auto"
-            />
-          </ReactCrop>
+        <div className="flex-1 overflow-hidden flex items-center justify-center">
+          {isLoading && (
+            <div className="w-full h-32 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neon-blue"></div>
+            </div>
+          )}
+          
+          <div className={`crop-container-wrapper max-h-[60vh] overflow-auto ${isLoading ? 'hidden' : 'block'}`}>
+            <ReactCrop
+              crop={crop}
+              onChange={c => setCrop(c)}
+              onComplete={c => setCompletedCrop(c)}
+              aspect={1}
+              circularCrop
+              minWidth={100}
+              minHeight={100}
+              className="crop-container"
+            >
+              <img
+                ref={imgRef}
+                src={imageUrl}
+                alt="Crop preview"
+                className="max-w-full object-contain max-h-[55vh]"
+                onLoad={handleImageLoad}
+              />
+            </ReactCrop>
+          </div>
         </div>
 
-        <div className="flex justify-end gap-3">
+        <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-gray-700">
           <button
             onClick={onClose}
             className="px-4 py-2 text-gray-300 hover:text-white"

@@ -3,7 +3,6 @@ import { Settings as SettingsIcon, X, Upload } from 'lucide-react';
 import { useAuth } from '../contexts/useAuth';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
-import { PromoteToAdminButton } from './admin/PromoteToAdminButton';
 
 export default function Settings() {
   const [isOpen, setIsOpen] = useState(false);
@@ -44,6 +43,8 @@ export default function Settings() {
       }
 
       toast.success('Profile photo updated successfully!');
+      // Force reload to show the new avatar
+      setTimeout(() => window.location.reload(), 1000);
     } catch (error) {
       toast.error('Error updating profile photo');
       console.error(error);
@@ -62,12 +63,13 @@ export default function Settings() {
       if (error) throw error;
       toast.success('Nickname updated successfully!');
       setIsOpen(false);
+      // Force reload to show the new nickname
+      setTimeout(() => window.location.reload(), 1000);
     } catch (error) {
       toast.error('Error updating nickname');
       console.error(error);
     }
   };
-  console.log('Logged in as:', user?.email);
 
   return (
     <>
@@ -149,11 +151,6 @@ export default function Settings() {
               >
                 Save Changes
               </button>
-
-              {/* Admin promotion button (visible only to you) */}
-              <div className="pt-4">
-                <PromoteToAdminButton />
-              </div>
             </div>
           </div>
         </div>

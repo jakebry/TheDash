@@ -145,17 +145,21 @@ export default function Login() {
 
         await signUp(email, password, {
           full_name: fullName,
-          role: 'user' // or 'business', or 'admin' depending on default logic
+          role: 'user'
         });
         
-        toast.success('Account created successfully! You can now sign in.');
         toggleMode(false);
       } else {
         await signIn(email, password);
-        toast.success(`Welcome back, ${email}!`);
+        toast.success('Welcome back!');
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+      const errorMessage = error instanceof Error 
+        ? error.message.includes('User already registered')
+          ? 'This email is already registered. Please sign in instead.'
+          : error.message
+        : 'An unexpected error occurred';
+      
       toast.error(errorMessage, {
         duration: 4000,
         style: {

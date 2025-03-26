@@ -87,13 +87,24 @@ export function ProfilePhoto({ avatarUrl, onPhotoUpdate }: ProfilePhotoProps) {
         .from('avatars')
         .getPublicUrl(filePath);
 
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ avatar_url: publicUrl })
-        .eq('id', user?.id);
-
-      if (updateError) {
-        throw updateError;
+      // Try using the RPC function first (most reliable)
+      const { error: rpcError } = await supabase.rpc('update_user_avatar', {
+        user_id: user?.id,
+        avatar_url: publicUrl
+      });
+      
+      if (rpcError) {
+        console.warn('Error updating via RPC:', rpcError);
+        
+        // Fallback to direct profile update
+        const { error: updateProfileError } = await supabase
+          .from('profiles')
+          .update({ avatar_url: publicUrl })
+          .eq('id', user?.id);
+          
+        if (updateProfileError) {
+          throw updateProfileError;
+        }
       }
 
       onPhotoUpdate(publicUrl);
