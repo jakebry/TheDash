@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
+/**
+ * Custom hook to fetch and track a user's role from Supabase metadata or profiles.
+ */
 export function useRole(userId: string | null = null) {
   const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -8,144 +11,124 @@ export function useRole(userId: string | null = null) {
   useEffect(() => {
     const getRole = async () => {
       try {
-        // First try to get current session
+        await supabase.auth.refreshSession(); // ✅ Always refresh session before fetching
         const { data: sessionData } = await supabase.auth.getSession();
         const sessionUser = sessionData?.session?.user;
-        
+
         if (!sessionUser && !userId) {
-          // No session and no userId provided
           setRole(null);
           setLoading(false);
           return;
         }
-        
-        // Determine which user ID to look up
+
         const targetUserId = userId || sessionUser?.id;
-        
         if (!targetUserId) {
           setRole(null);
           setLoading(false);
           return;
         }
-        
-        // First check if we already have the role in user metadata
-        // This avoids an extra database query
-        if (sessionUser && sessionUser.id === targetUserId) {
-          // Check multiple places for the role with priority:
-          // 1. JWT app_metadata (this is used for authorization)
-          // 2. User metadata (this is persisted in the database)
-          const appMetadataRole = sessionUser.app_metadata?.role;
-          const userMetadataRole = sessionUser.user_metadata?.role;
-          
-          if (appMetadataRole) {
-            setRole(appMetadataRole);
-            setLoading(false);
-            return;
-          }
-          
-          if (userMetadataRole) {
-            setRole(userMetadataRole);
-            setLoading(false);
-            return;
-          }
+
+        // Prioritize fast role detection from JWT / user metadata
+        const appMetadataRole = sessionUser?.app_metadata?.role;
+        const userMetadataRole = sessionUser?.user_metadata?.role;
+
+        if (appMetadataRole) {
+          setRole(appMetadataRole);
+          setLoading(false);
+          return;
         }
-        
-        // Get role from profiles table as a fallback
+
+        if (userMetadataRole) {
+          setRole(userMetadataRole);
+          setLoading(false);
+          return;
+        }
+
+        // Fallback to profiles table
         const { data, error } = await supabase
           .from('profiles')
           .select('role')
           .eq('id', targetUserId)
           .maybeSingle();
-          
+
         if (error) {
-          console.error('Error fetching role:', error);
-          // Attempt to get role through RPC if direct query fails
+          console.error('Error fetching role from profiles:', error);
           try {
-            const { data: roleData } = await supabase.rpc('get_all_auth_roles', { 
-              target_id: targetUserId 
-            });
-            
-            // Use the most authoritative role from multiple sources
+            const { data: roleData } = await supabase.rpc('get_all_auth_roles', { target_id: targetUserId });
+
             if (roleData) {
-              if (roleData.is_admin_in_jwt || 
-                  roleData.is_admin_in_profile || 
-                  roleData.is_admin_in_user_metadata ||
-                  roleData.is_admin_in_app_metadata) {
+              if (
+                roleData.is_admin_in_jwt ||
+                roleData.is_admin_in_profile ||
+                roleData.is_admin_in_user_metadata ||
+                roleData.is_admin_in_app_metadata
+              ) {
                 setRole('admin');
-              } else if (roleData.profile_role === 'business' || 
-                        roleData.user_metadata_role === 'business' || 
-                        roleData.app_metadata_role === 'business') {
+              } else if (
+                roleData.profile_role === 'business' ||
+                roleData.user_metadata_role === 'business' ||
+                roleData.app_metadata_role === 'business'
+              ) {
                 setRole('business');
               } else {
                 setRole('user');
               }
             } else {
-              setRole('user'); // Default fallback
+              setRole('user');
             }
           } catch (rpcError) {
-            console.error('RPC role check failed:', rpcError);
-            setRole('user'); // Default fallback
+            console.error('RPC fallback failed:', rpcError);
+            setRole('user');
           }
         } else if (data?.role) {
           setRole(data.role);
         } else {
-          // Fallback if no profile found
           setRole('user');
         }
       } catch (error) {
-        console.error('Exception in role fetch:', error);
-        setRole('user'); // Default fallback
+        console.error('General exception during role fetch:', error);
+        setRole('user');
       } finally {
         setLoading(false);
       }
     };
 
-    // Only fetch when component mounts or userId changes
     getRole();
   }, [userId]);
 
-  // Force refresh role function - can be called after role updates
   const refreshRole = async () => {
     setLoading(true);
     try {
-      // First try to get from JWT and auth
-      const { data: sessionData } = await supabase.auth.getSession();
-      const sessionUser = sessionData?.session?.user;
-      
-      if (!sessionUser && !userId) {
-        setRole(null);
-        return;
-      }
-      
-      const targetUserId = userId || sessionUser?.id;
-      
-      // Fetch fresh role data from multiple sources
-      const { data: roleData } = await supabase.rpc('get_all_auth_roles', { 
-        target_id: targetUserId 
+      await supabase.auth.refreshSession(); // ✅ Proactive refresh
+
+      const { data: roleData } = await supabase.rpc('get_all_auth_roles', {
+        target_id: userId
       });
-      
+
       if (roleData) {
-        // Determine highest privilege role
-        if (roleData.is_admin_in_jwt || 
-            roleData.is_admin_in_profile || 
-            roleData.is_admin_in_user_metadata ||
-            roleData.is_admin_in_app_metadata) {
+        if (
+          roleData.is_admin_in_jwt ||
+          roleData.is_admin_in_profile ||
+          roleData.is_admin_in_user_metadata ||
+          roleData.is_admin_in_app_metadata
+        ) {
           setRole('admin');
-        } else if (roleData.profile_role === 'business' || 
-                 roleData.user_metadata_role === 'business' || 
-                 roleData.app_metadata_role === 'business') {
+        } else if (
+          roleData.profile_role === 'business' ||
+          roleData.user_metadata_role === 'business' ||
+          roleData.app_metadata_role === 'business'
+        ) {
           setRole('business');
         } else {
           setRole('user');
         }
       } else {
-        // Fallback to direct profile query
         const { data } = await supabase
           .from('profiles')
           .select('role')
-          .eq('id', targetUserId)
+          .eq('id', userId)
           .maybeSingle();
-          
+
         setRole(data?.role || 'user');
       }
     } catch (error) {
@@ -155,5 +138,7 @@ export function useRole(userId: string | null = null) {
     }
   };
 
-  return { role, loading, refreshRole };
+  const getCurrentRole = () => role;
+
+  return { role, loading, refreshRole, getCurrentRole };
 }
