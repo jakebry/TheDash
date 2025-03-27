@@ -21,8 +21,8 @@ const roleColors = {
 };
 
 export function UserList({
-  users,
-  businesses,
+  users = [],
+  businesses = [],
   loading,
   verifying,
   updatingRoles,
@@ -35,7 +35,7 @@ export function UserList({
     return <LoadingRows />;
   }
 
-  if (users.length === 0) {
+  if (!Array.isArray(users) || users.length === 0) {
     return (
       <div className="text-center py-8 text-gray-400">
         No users found. Try clicking "Verify Access" to fix admin permissions.
@@ -78,15 +78,19 @@ export function UserList({
             </td>
             <td className="py-4">
               <div className="flex flex-wrap gap-2">
-                {user.businesses?.map((business) => (
-                  <span
-                    key={business.id}
-                    className="inline-flex items-center gap-1 px-2 py-1 bg-light-blue rounded-md text-xs text-white"
-                  >
-                    <Building2 className="w-3 h-3" />
-                    {business.name}
-                  </span>
-                ))}
+                {Array.isArray(user.businesses) && user.businesses.length > 0 ? (
+                  user.businesses.map((business) => (
+                    <span
+                      key={business.id}
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-light-blue rounded-md text-xs text-white"
+                    >
+                      <Building2 className="w-3 h-3" />
+                      {business.name}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-sm text-gray-400">No businesses assigned</span>
+                )}
               </div>
             </td>
             <td className="py-4">
@@ -101,7 +105,7 @@ export function UserList({
                   className="bg-light-blue text-white border border-gray-600 rounded px-2 py-1 text-sm focus:outline-none focus:border-neon-blue"
                 >
                   <option value="">Assign to company...</option>
-                  {businesses.map((business) => (
+                  {Array.isArray(businesses) && businesses.map((business) => (
                     <option key={business.id} value={business.id}>
                       {business.name}
                     </option>
