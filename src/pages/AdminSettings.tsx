@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { Navigate } from 'react-router-dom';
 import { UserManagement } from '../components/admin/UserManagement';
+import { BusinessManagement } from '../components/admin/BusinessManagement';
 import { useAuth } from '../contexts/useAuth';
 import { useRole } from '../hooks/useRole';
 
@@ -62,6 +63,7 @@ export default function AdminSettings() {
         <StatCard icon={<Building2 />} label="Businesses" value={stats?.total_businesses ?? 0} />
         <StatCard icon={<AlertCircle />} label="Active This Week" value={stats?.active_users_last_week ?? 0} />
       </div>
+      <BusinessManagement />
       <UserManagement />
     </Layout>
   );

@@ -21,40 +21,28 @@ export function PersonalInfo({ fullName, onFullNameChange }: PersonalInfoProps) 
   const [updating, setUpdating] = useState(false);
   const [displayRole, setDisplayRole] = useState<string | null>(null);
 
+  // Debounce the role refresh to prevent too many requests
   useEffect(() => {
-    // Force refresh the role to ensure we have the latest
-    const updateRole = async () => {
-      await refreshRole();
-      
-      // Get the most accurate role from all sources
+    const timer = setTimeout(() => {
+      if (user?.id) {
+        refreshRole();
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [user?.id]);
+
+  useEffect(() => {
+    const updateDisplayRole = async () => {
       try {
-        const { data } = await supabase.rpc('get_all_auth_roles');
-        
-        if (data) {
-          // Use the highest privilege role from any source
-          if (data.is_admin_in_jwt || 
-              data.is_admin_in_profile || 
-              data.is_admin_in_user_metadata ||
-              data.is_admin_in_app_metadata) {
-            setDisplayRole('admin');
-          } else if (data.profile_role === 'business' || 
-                  data.user_metadata_role === 'business' || 
-                  data.app_metadata_role === 'business' ||
-                  data.jwt_role === 'business') {
-            setDisplayRole('business');
-          } else {
-            setDisplayRole('user');
-          }
-        } else {
-          setDisplayRole(role);
-        }
+        setDisplayRole(role);
       } catch (error) {
-        console.error('Error getting all roles:', error);
+        console.error('Error updating display role:', error);
         setDisplayRole(role);
       }
     };
     
-    updateRole();
+    updateDisplayRole();
   }, [role]);
 
   const updateProfile = async () => {
