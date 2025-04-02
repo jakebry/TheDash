@@ -26,7 +26,6 @@ export function BusinessInviteModal({ businessId, businessName, onClose }: Busin
   const { user } = useAuth();
 
   useEffect(() => {
-    // Debounce search
     const timeoutId = setTimeout(() => {
       if (searchTerm.length >= 2) {
         searchUsers(searchTerm);
@@ -40,46 +39,63 @@ export function BusinessInviteModal({ businessId, businessName, onClose }: Busin
 
   const searchUsers = async (query: string) => {
     if (!user) return;
-    
+
     try {
       setLoading(true);
-      
-      // First get existing business members to filter them out
+
       const { data: membersData, error: membersError } = await supabase
         .from('business_members')
         .select('user_id')
         .eq('business_id', businessId);
-        
+
       if (membersError) throw membersError;
-      
+
       const existingMemberIds = membersData?.map(member => member.user_id) || [];
-      
-      // Search for users by email or name - use ilike with separate filters for better results
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, email, full_name, avatar_url')
-        .or(`email.ilike.%${query}%,email.eq.${query},full_name.ilike.%${query}%`)
-        .neq('id', user.id) // Exclude the current user
-        .limit(10);
-        
-      if (error) throw error;
-      
-      // Mark which users are already members
-      const formattedResults = (data || []).map((user) => ({
+
+      console.log("✅ Search term:", query);
+      console.log("✅ Existing business members:", existingMemberIds);
+
+      const likeQuery = `%${query}%`;
+
+      const [{ data: emailMatches, error: emailError }, { data: nameMatches, error: nameError }] =
+        await Promise.all([
+          supabase
+            .from('profiles')
+            .select('id, email, full_name, avatar_url')
+            .ilike('email', likeQuery)
+            .neq('id', user.id)
+            .limit(10),
+          supabase
+            .from('profiles')
+            .select('id, email, full_name, avatar_url')
+            .ilike('full_name', likeQuery)
+            .neq('id', user.id)
+            .limit(10)
+        ]);
+
+      if (emailError || nameError) throw emailError || nameError;
+
+      const combined = [...(emailMatches || []), ...(nameMatches || [])];
+      const uniqueResults = Array.from(new Map(combined.map(user => [user.id, user])).values());
+
+      console.log("✅ Supabase results:", uniqueResults);
+
+      const formattedResults = uniqueResults.map(user => ({
         ...user,
         isMember: existingMemberIds.includes(user.id)
       }));
-      
+
+      console.log("✅ Final formatted search results:", formattedResults);
+
       setSearchResults(formattedResults);
 
       if (formattedResults.length === 0 && query.includes('@')) {
-        // Try a more exact search for emails
         const { data: exactData, error: exactError } = await supabase
           .from('profiles')
           .select('id, email, full_name, avatar_url')
           .eq('email', query.trim())
           .limit(1);
-          
+
         if (!exactError && exactData && exactData.length > 0) {
           const exactResults = exactData.map(user => ({
             ...user,
@@ -89,7 +105,7 @@ export function BusinessInviteModal({ businessId, businessName, onClose }: Busin
         }
       }
     } catch (error) {
-      console.error('Error searching users:', error);
+      console.error('❌ Error searching users:', error);
       toast.error('Failed to search users');
     } finally {
       setLoading(false);
@@ -99,23 +115,21 @@ export function BusinessInviteModal({ businessId, businessName, onClose }: Busin
   const inviteUser = async (userId: string, userName: string) => {
     try {
       setInviting(prev => ({ ...prev, [userId]: true }));
-      
-      // First check if the user is already a member
+
       const { data: existingMember, error: checkError } = await supabase
         .from('business_members')
         .select('id')
         .eq('business_id', businessId)
         .eq('user_id', userId)
         .maybeSingle();
-        
+
       if (checkError) throw checkError;
-      
+
       if (existingMember) {
         toast.error(`${userName} is already a member of this business`);
         return;
       }
 
-      // Create a notification for the user
       const { error: notificationError } = await supabase
         .from('notifications')
         .insert({
@@ -130,28 +144,26 @@ export function BusinessInviteModal({ businessId, businessName, onClose }: Busin
             inviter_name: user?.user_metadata?.full_name || user?.email
           }
         });
-        
+
       if (notificationError) throw notificationError;
-      
-      // Update the UI to show the user as invited
-      setSearchResults(prev => 
-        prev.map(result => 
-          result.id === userId 
-            ? { ...result, isMember: true } 
+
+      setSearchResults(prev =>
+        prev.map(result =>
+          result.id === userId
+            ? { ...result, isMember: true }
             : result
         )
       );
-      
+
       toast.success(`Invitation sent to ${userName}`);
     } catch (error) {
-      console.error('Error inviting user:', error);
+      console.error('❌ Error inviting user:', error);
       toast.error('Failed to send invitation');
     } finally {
       setInviting(prev => ({ ...prev, [userId]: false }));
     }
   };
-  
-  // Determine which message to show based on state
+
   const renderResultsContent = () => {
     if (loading) {
       return (
@@ -160,7 +172,7 @@ export function BusinessInviteModal({ businessId, businessName, onClose }: Busin
         </div>
       );
     }
-    
+
     if (searchResults.length === 0) {
       if (searchTerm.length >= 2) {
         return (
@@ -175,11 +187,11 @@ export function BusinessInviteModal({ businessId, businessName, onClose }: Busin
         </div>
       );
     }
-    
+
     return (
       <div className="space-y-2">
         {searchResults.map((result) => (
-          <div 
+          <div
             key={result.id}
             className="flex items-center justify-between p-3 rounded-lg hover:bg-light-blue transition-colors"
           >
@@ -200,7 +212,7 @@ export function BusinessInviteModal({ businessId, businessName, onClose }: Busin
                 <div className="text-sm text-gray-400">{result.email}</div>
               </div>
             </div>
-            
+
             {result.isMember ? (
               <span className="flex items-center gap-1 text-sm text-emerald-400">
                 <Check className="w-4 h-4" />
@@ -245,12 +257,7 @@ export function BusinessInviteModal({ businessId, businessName, onClose }: Busin
           />
         </div>
 
-        {/* Fixed height container to prevent layout shifts */}
-        <div 
-          className="h-72 overflow-y-auto mb-4 relative" 
-          onWheel={(e) => e.currentTarget.scrollBy(0, e.deltaY)}
-          style={{ WebkitOverflowScrolling: 'touch' }}
-        >
+        <div className="h-72 overflow-y-auto mb-4 relative">
           {renderResultsContent()}
         </div>
 
