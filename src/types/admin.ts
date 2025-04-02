@@ -3,11 +3,10 @@ export interface Business {
   name: string;
 }
 
-export interface User {
+export type User = {
   id: string;
   email: string;
-  full_name: string;
+  full_name?: string;
   role: 'admin' | 'business' | 'user';
-  created_at: string;
-  businesses?: Business[];
-}
+  businesses?: Business[]; // <- this must exist for type safety
+};

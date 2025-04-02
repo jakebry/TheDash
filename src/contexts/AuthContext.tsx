@@ -49,13 +49,24 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signUp = async (email: string, password: string, options: SignUpOptions) => {
     const { full_name, role } = options;
 
+    // First check if user exists
+    const { data: existingUser } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (existingUser) {
+      throw new Error('User already exists with this email');
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: { 
           full_name,
-          role // Include role in metadata to help with RLS policies
+          role: 'user'
         },
       },
     });
@@ -65,13 +76,21 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const newUser = data.user;
     if (!newUser) throw new Error('Failed to create user');
     
-    // Wait a moment for the trigger to create the profile
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Now sign in with the new credentials
-    await signIn(email, password);
-    
-    toast.success('Account created successfully!');
+    try {
+      // Wait for trigger to create profile and validate role
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Validate and repair user role
+      await supabase.rpc('validate_user_role', { user_id: newUser.id });
+
+      // Now sign in with the new credentials
+      await signIn(email, password);
+      
+      toast.success('Account created successfully!');
+    } catch (error: any) {
+      console.error('Signup error:', error);
+      throw new Error(error.message || 'Failed to complete signup');
+    }
   };
 
   const signOut = async () => {

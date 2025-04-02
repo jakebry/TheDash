@@ -3,6 +3,7 @@ import { Bell, Trash2, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/useAuth';
 import { CreateBusinessModal } from './modals/CreateBusinessModal';
+import { BusinessJoinModal } from './business/BusinessJoinModal';
 import toast from 'react-hot-toast';
 
 interface Notification {
@@ -20,7 +21,10 @@ interface Notification {
 export function NotificationMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [showBusinessModal, setShowBusinessModal] = useState(false);
+  const [showJoinBusinessModal, setShowJoinBusinessModal] = useState(false);
+  const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isMarkingRead, setIsMarkingRead] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -32,18 +36,27 @@ export function NotificationMenu() {
     // Fetch initial notifications
     const fetchNotifications = async () => {
       try {
+        setIsLoading(true);
+        // Ensure profile exists before fetching notifications
+        if (user?.id) {
+          await supabase.rpc('ensure_profile_exists', { user_id: user.id });
+        }
         const { data, error } = await supabase
           .from('notifications')
           .select('*')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
           .limit(50);
-
-        if (error) throw error;
+        if (error) {
+          console.error('Error fetching notifications:', error);
+          throw error;
+        }
         setNotifications(data || []);
       } catch (error) {
         console.error('Error fetching notifications:', error);
         toast.error('Failed to load notifications');
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -279,6 +292,12 @@ export function NotificationMenu() {
       }
     }
     
+    // Handle business invitation
+    if (notification.type === 'business_invitation') {
+      setSelectedNotification(notification);
+      setShowJoinBusinessModal(true);
+    }
+    
     // Mark as read
     if (!notification.read) {
       await markAsRead(notification.id);
@@ -293,6 +312,7 @@ export function NotificationMenu() {
           bgColor: 'bg-purple-500/20', 
           borderColor: 'border-purple-500/30' 
         };
+      case 'business_invitation':
       case 'business_role':
         return { 
           bgColor: 'bg-emerald-500/20', 
@@ -342,7 +362,11 @@ export function NotificationMenu() {
           </div>
 
           <div className="max-h-96 overflow-y-auto">
-            {notifications.length === 0 ? (
+            {isLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neon-blue"></div>
+              </div>
+            ) : notifications.length === 0 ? (
               <div className="p-4 text-center text-gray-400">
                 No notifications
               </div>
@@ -380,6 +404,13 @@ export function NotificationMenu() {
                               )}
                             </div>
                           )}
+                          {notification.type === 'business_invitation' && (
+                            <div className={`mt-2 p-1.5 rounded text-xs ${borderColor} ${bgColor}`}>
+                              <span>
+                                From <span className="font-medium">{notification.metadata?.inviter_name || 'Unknown'}</span>
+                              </span>
+                            </div>
+                          )}
                         </div>
                         <span className="text-xs text-gray-500 whitespace-nowrap">
                           {formatTime(notification.created_at)}
@@ -408,6 +439,19 @@ export function NotificationMenu() {
       
       {showBusinessModal && (
         <CreateBusinessModal onClose={() => setShowBusinessModal(false)} />
+      )}
+
+      {showJoinBusinessModal && selectedNotification && (
+        <BusinessJoinModal 
+          businessId={selectedNotification.metadata.business_id}
+          businessName={selectedNotification.metadata.business_name}
+          notificationId={selectedNotification.id}
+          inviterName={selectedNotification.metadata.inviter_name || 'A business owner'}
+          onClose={() => {
+            setShowJoinBusinessModal(false);
+            setSelectedNotification(null);
+          }}
+        />
       )}
     </div>
   );

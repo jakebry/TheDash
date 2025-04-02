@@ -11,7 +11,7 @@ export function useRole(userId: string | null = null) {
   useEffect(() => {
     const getRole = async () => {
       try {
-        await supabase.auth.refreshSession(); // ✅ Always refresh session before fetching
+        await supabase.auth.refreshSession();
         const { data: sessionData } = await supabase.auth.getSession();
         const sessionUser = sessionData?.session?.user;
 
@@ -35,12 +35,16 @@ export function useRole(userId: string | null = null) {
         if (appMetadataRole) {
           setRole(appMetadataRole);
           setLoading(false);
+          // Create profile if missing
+          await supabase.rpc('ensure_profile_exists', { user_id: targetUserId });
           return;
         }
 
         if (userMetadataRole) {
           setRole(userMetadataRole);
           setLoading(false);
+          // Create profile if missing
+          await supabase.rpc('ensure_profile_exists', { user_id: targetUserId });
           return;
         }
 
@@ -54,6 +58,9 @@ export function useRole(userId: string | null = null) {
         if (error) {
           console.error('Error fetching role from profiles:', error);
           try {
+            // Try to create profile if missing
+            await supabase.rpc('ensure_profile_exists', { user_id: targetUserId });
+            
             const { data: roleData } = await supabase.rpc('get_all_auth_roles', { target_id: targetUserId });
 
             if (roleData) {

@@ -4,6 +4,7 @@ import Login from '../pages/Login';
 import Layout from '../components/Layout';
 import Settings from '../pages/Settings';
 import AdminSettings from '../pages/AdminSettings';
+import BusinessPage from '../pages/BusinessPage';
 
 export default function AppRoutes() {
   const { user, loading } = useAuth();
@@ -34,9 +35,7 @@ export default function AppRoutes() {
         path="/business"
         element={
           user ? (
-            <Layout>
-              <div>Business Management</div>
-            </Layout>
+            <BusinessPage />
           ) : (
             <Navigate to="/login" replace />
           )
