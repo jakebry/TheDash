@@ -117,22 +117,12 @@ export function NotificationMenu() {
         // Refresh session before subscribing (using throttled refreshSession)
         await refreshSession(supabase);
         
-        // Ensure we have a valid user ID
-        if (!user?.id) {
-          console.warn('No user ID available for notification subscription');
-          return null;
-        }
-        
-        const subscription = supabase
-          .channel('notifications')
-          .on('postgres_changes', {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'notifications'
-          }, async (payload) => {
-            // Filter notifications client-side to avoid subscription issues
-            if (payload.new.user_id === user.id) {
-            // No need to refresh session here - handled by throttled refreshSession if needed
+        // Define callback functions before subscription
+        const handleInsert = (payload: any) => {
+          if (!payload?.new?.user_id) return;
+          
+          // Filter notifications client-side to avoid subscription issues
+          if (payload.new.user_id === user?.id) {
             setNotifications(prev => [payload.new as Notification, ...prev]);
             toast.success('New notification received!', {
               icon: '🔔',
@@ -140,7 +130,6 @@ export function NotificationMenu() {
             
             // Handle role-specific notifications
             if (payload.new.type === 'role_change') {
-              // Role change notifications might require additional UI feedback
               const newRole = payload.new.metadata?.new_role;
               if (newRole) {
                 toast.success(`Your role has been updated to ${newRole}`, {
@@ -148,7 +137,6 @@ export function NotificationMenu() {
                   icon: '👑'
                 });
                 
-                // If role changed from something else to admin, suggest page refresh
                 if (newRole === 'admin') {
                   toast.success('Please refresh the page to apply new admin permissions', {
                     duration: 8000,
@@ -157,46 +145,64 @@ export function NotificationMenu() {
                 }
               }
             }
-            }
-          })
+          }
+        };
+        
+        const handleUpdate = (payload: any) => {
+          if (!payload?.new?.user_id) return;
+          
+          if (payload.new.user_id === user?.id) {
+            setNotifications(prev =>
+              prev.map(n => n.id === payload.new.id ? payload.new as Notification : n)
+            );
+          }
+        };
+        
+        const handleDelete = (payload: any) => {
+          if (!payload?.old?.user_id) return;
+          
+          if (payload.old.user_id === user?.id) {
+            setNotifications(prev => 
+              prev.filter(n => n.id !== payload.old.id)
+            );
+          }
+        };
+        
+        // Ensure we have a valid user ID
+        if (!user?.id) {
+          console.warn('No user ID available for notification subscription');
+          return;
+        }
+        
+        const subscription = supabase
+          .channel('notifications')
+          .on('postgres_changes', {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications'
+          }, handleInsert)
           .on('postgres_changes', {
             event: 'UPDATE',
             schema: 'public',
             table: 'notifications'
-          }, (payload) => {
-            // Filter updates client-side
-            if (payload.new.user_id === user.id) {
-            setNotifications(prev =>
-              prev.map(n => n.id === payload.new.id ? payload.new as Notification : n)
-            );
-            }
-          })
+          }, handleUpdate)
           .on('postgres_changes', {
             event: 'DELETE',
             schema: 'public',
             table: 'notifications'
-          }, (payload) => {
-            // Filter deletes client-side
-            if (payload.old.user_id === user.id) {
-            setNotifications(prev => 
-              prev.filter(n => n.id !== payload.old.id)
-            );
-            }
-          })
-          .subscribe({
-            callback: (status, err) => {
-              if (status === 'SUBSCRIBED') {
-                console.log('Successfully subscribed to notifications');
-              } else if (status === 'CHANNEL_ERROR') {
-                console.error('Failed to subscribe to notifications:', err);
-                toast.error('Failed to subscribe to notifications');
-              } else if (status === 'TIMED_OUT') {
-                console.warn('Subscription timed out, retrying...');
-                // Implement retry after timeout
-                setTimeout(() => {
-                  subscription.subscribe();
-                }, 2000);
-              }
+          }, handleDelete)
+          .subscribe((status, err) => {
+            if (status === 'SUBSCRIBED') {
+              console.log('Successfully subscribed to notifications');
+            } else if (status === 'CHANNEL_ERROR') {
+              console.error('Failed to subscribe to notifications:', err);
+              toast.error('Failed to subscribe to notifications');
+            } else if (status === 'TIMED_OUT') {
+              console.warn('Subscription timed out, retrying...');
+              // Implement retry after timeout
+              setTimeout(() => {
+                subscription.subscribe();
+              }, 2000);
             }
           });
           
@@ -204,7 +210,7 @@ export function NotificationMenu() {
       } catch (error) {
         console.error('Error setting up subscription:', error);
         toast.error('Failed to set up notifications');
-        return null;
+        return;
       }
     };
     
@@ -225,7 +231,7 @@ export function NotificationMenu() {
     return () => {
       // Clean up subscription
       subscriptionPromise.then(subscription => {
-        if (subscription) subscription.unsubscribe();
+        subscription?.unsubscribe();
       });
       clearInterval(refreshInterval);
       document.removeEventListener('mousedown', handleClickOutside);

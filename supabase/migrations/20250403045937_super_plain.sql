@@ -2,21 +2,41 @@
   # Add read status to chat messages
 
   1. Changes
-    - Add read column to chat_messages table
-    - Add function to mark messages as read
-    - Add function to get unread count
+    - Add read column to chat_messages table (if not exists)
+    - Add index for read column
+    - Add functions for managing read status
     
   2. Security
     - Use security definer for functions
     - Maintain existing RLS policies
 */
 
--- Add read column to chat_messages
-ALTER TABLE chat_messages
-ADD COLUMN read boolean DEFAULT false;
+-- First check if read column exists and create if missing
+DO $$ 
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 
+    FROM information_schema.columns 
+    WHERE table_name = 'chat_messages' 
+    AND column_name = 'read'
+  ) THEN
+    ALTER TABLE chat_messages
+    ADD COLUMN read boolean DEFAULT false;
+  END IF;
+END $$;
 
--- Create index for better performance
-CREATE INDEX idx_chat_messages_read ON chat_messages(read);
+-- Create index if it doesn't exist
+DO $$ 
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_indexes
+    WHERE tablename = 'chat_messages'
+    AND indexname = 'idx_chat_messages_read'
+  ) THEN
+    CREATE INDEX idx_chat_messages_read ON chat_messages(read);
+  END IF;
+END $$;
 
 -- Function to mark messages as read
 CREATE OR REPLACE FUNCTION mark_messages_as_read(

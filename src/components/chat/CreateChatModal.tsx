@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Search, Users, Check, Building2, User } from 'lucide-react';
+import { X, Search, Users, Check, Building2, User, ChevronRight } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/useAuth';
 import toast from 'react-hot-toast';
@@ -33,6 +33,11 @@ interface ChatRoom {
     email: string;
     avatar_url: string | null;
   };
+  members?: {
+    id: string;
+    full_name: string | null;
+    email: string;
+  }[];
 }
 
 interface CreateChatModalProps {
@@ -50,6 +55,8 @@ export function CreateChatModal({ businesses, onClose, onChatCreated }: CreateCh
   const [selectedType, setSelectedType] = useState<'group' | 'private'>('private');
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [groupName, setGroupName] = useState('');
+  const [selectedMembers, setSelectedMembers] = useState<BusinessMember[]>([]);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -63,6 +70,7 @@ export function CreateChatModal({ businesses, onClose, onChatCreated }: CreateCh
       fetchBusinessMembers(selectedBusiness.id);
       setSearchTerm('');
       setSearchResults([]);
+      setGroupName(`${selectedBusiness.name} Group Chat`);
     } else {
       setMembers([]);
       setSearchResults([]);
@@ -192,13 +200,35 @@ export function CreateChatModal({ businesses, onClose, onChatCreated }: CreateCh
           recipient: selectedMember.profile
         });
       } else {
-        // Return the group chat info
+        // Group chat with selected members
+        const chatName = groupName.trim() || `${selectedBusiness.name} Group Chat`;
+        
+        // Send system message to create the group chat
+        const systemMessage = selectedMembers.length > 0 
+          ? `Group chat "${chatName}" created with ${selectedMembers.length} members`
+          : `${chatName} created`;
+        
+        const { error: messageError } = await supabase
+          .rpc('send_system_message', {
+            p_business_id: selectedBusiness.id,
+            p_message: systemMessage,
+            p_is_private: false
+          });
+          
+        if (messageError) throw messageError;
+        
+        // Return the group chat info with selected members
         onChatCreated({
           id: `group-${selectedBusiness.id}`,
-          name: `${selectedBusiness.name} Group Chat`,
+          name: chatName,
           type: 'group',
           business_id: selectedBusiness.id,
-          business_name: selectedBusiness.name
+          business_name: selectedBusiness.name,
+          members: selectedMembers.map(member => ({
+            id: member.profile.id,
+            full_name: member.profile.full_name,
+            email: member.profile.email
+          }))
         });
       }
     } catch (error) {
@@ -207,6 +237,18 @@ export function CreateChatModal({ businesses, onClose, onChatCreated }: CreateCh
     } finally {
       setCreating(false);
     }
+  };
+  
+  const toggleMemberSelection = (member: BusinessMember) => {
+    if (selectedMembers.some(m => m.id === member.id)) {
+      setSelectedMembers(selectedMembers.filter(m => m.id !== member.id));
+    } else {
+      setSelectedMembers([...selectedMembers, member]);
+    }
+  };
+  
+  const isSelected = (member: BusinessMember) => {
+    return selectedMembers.some(m => m.id === member.id);
   };
 
   const displayMembers = searchTerm.length >= 2 ? searchResults : members;
@@ -236,6 +278,7 @@ export function CreateChatModal({ businesses, onClose, onChatCreated }: CreateCh
                   const business = businesses.find(b => b.id === e.target.value);
                   setSelectedBusiness(business || null);
                   setSelectedMember(null);
+                  setSelectedMembers([]);
                 }}
                 className="w-full px-4 py-2 bg-light-blue border border-gray-600 rounded-lg text-white focus:outline-none focus:border-neon-blue"
               >
@@ -260,6 +303,7 @@ export function CreateChatModal({ businesses, onClose, onChatCreated }: CreateCh
                     onClick={() => {
                       setSelectedType('private');
                       setSelectedMember(null);
+                      setSelectedMembers([]);
                     }}
                     className={`p-3 rounded-lg border flex flex-col items-center transition-colors ${
                       selectedType === 'private'
@@ -272,7 +316,10 @@ export function CreateChatModal({ businesses, onClose, onChatCreated }: CreateCh
                   </button>
                   
                   <button
-                    onClick={() => setSelectedType('group')}
+                    onClick={() => {
+                      setSelectedType('group');
+                      setSelectedMember(null);
+                    }}
                     className={`p-3 rounded-lg border flex flex-col items-center transition-colors ${
                       selectedType === 'group'
                         ? 'bg-neon-blue/20 border-neon-blue'
@@ -286,13 +333,114 @@ export function CreateChatModal({ businesses, onClose, onChatCreated }: CreateCh
               </div>
               
               {selectedType === 'group' ? (
-                <div className="p-4 rounded-lg bg-light-blue/50 border border-gray-600 text-center">
-                  <Building2 className="w-8 h-8 text-neon-blue mx-auto mb-2" />
-                  <h3 className="font-medium text-white mb-1">{selectedBusiness.name} Group Chat</h3>
-                  <p className="text-sm text-gray-400">
-                    This chat is visible to all members of the business
-                  </p>
-                </div>
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Group Name
+                    </label>
+                    <input
+                      type="text"
+                      value={groupName}
+                      onChange={(e) => setGroupName(e.target.value)}
+                      placeholder="Enter a name for the group chat"
+                      className="w-full px-4 py-2 bg-light-blue border border-gray-600 rounded-lg text-white focus:outline-none focus:border-neon-blue"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Select Members
+                    </label>
+                    <div className="relative mb-3">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Search by name or email..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 bg-light-blue border border-gray-600 rounded-lg text-white focus:outline-none focus:border-neon-blue"
+                      />
+                    </div>
+                    
+                    {selectedMembers.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {selectedMembers.map(member => (
+                          <div 
+                            key={member.id}
+                            className="flex items-center gap-1 px-2 py-1 bg-neon-blue/20 rounded-full"
+                          >
+                            <span className="text-xs text-white truncate max-w-[120px]">
+                              {member.profile.full_name || member.profile.email}
+                            </span>
+                            <button
+                              onClick={() => toggleMemberSelection(member)}
+                              className="text-white hover:text-red-300"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    <div className="h-60 overflow-y-auto rounded-lg border border-gray-600">
+                      {loading ? (
+                        <div className="flex justify-center py-8">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neon-blue"></div>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-gray-700 relative">
+                          {displayMembers.length === 0 ? (
+                            <div className="text-center py-8 text-gray-400">
+                              {searchTerm.length >= 2 
+                                ? `No members found matching "${searchTerm}"`
+                                : searchTerm.length === 1
+                                ? 'Type at least 2 characters to search'
+                                : 'No team members found'}
+                            </div>
+                          ) : (
+                            displayMembers.map((member) => (
+                              <div
+                                key={member.id}
+                                onClick={() => toggleMemberSelection(member)}
+                                className={`w-full p-3 flex items-center cursor-pointer hover:bg-light-blue/50 transition-colors ${
+                                  isSelected(member) ? 'bg-neon-blue/20' : ''
+                                }`}
+                              >
+                                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-neon-blue/20 flex items-center justify-center overflow-hidden mr-3">
+                                  {member.profile?.avatar_url ? (
+                                    <img
+                                      src={member.profile.avatar_url}
+                                      alt={member.profile.full_name || member.profile.email}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <User className="w-5 h-5 text-neon-blue" />
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0 text-left">
+                                  <div className="font-medium text-white">
+                                    {member.profile?.full_name || 'Unnamed User'}
+                                  </div>
+                                  <div className="text-sm text-gray-400">{member.profile?.email || 'No email'}</div>
+                                </div>
+                                {isSelected(member) && (
+                                  <Check className="w-5 h-5 text-neon-blue" />
+                                )}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {selectedMembers.length > 0 && (
+                      <p className="text-sm text-gray-400 mt-2">
+                        {selectedMembers.length} member{selectedMembers.length !== 1 ? 's' : ''} selected
+                      </p>
+                    )}
+                  </div>
+                </>
               ) : (
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -372,9 +520,10 @@ export function CreateChatModal({ businesses, onClose, onChatCreated }: CreateCh
                 <button
                   onClick={handleCreateChat}
                   disabled={creating || (selectedType === 'private' && !selectedMember)}
-                  className="px-4 py-2 bg-neon-blue text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
+                  className="px-4 py-2 bg-neon-blue text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 flex items-center gap-1"
                 >
                   {creating ? 'Creating...' : 'Start Chat'}
+                  {!creating && <ChevronRight className="w-4 h-4" />}
                 </button>
               </div>
             </>

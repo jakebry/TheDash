@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Search, Send, Plus, Users, ChevronLeft, User } from 'lucide-react';
+import { MessageSquare, Search, Send, Plus, Users, ChevronLeft, User, Loader2 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/useAuth';
 import toast from 'react-hot-toast';
 import { CreateChatModal } from '../components/chat/CreateChatModal';
+import '../styles/chat-animations.css';
 
 type ChatType = 'group' | 'private';
 
@@ -15,10 +16,12 @@ interface ChatMessage {
   sender_id: string;
   sender?: {
     id: string;
-    full_name: string;
+    full_name: string | null;
     email: string;
     avatar_url: string | null;
   };
+  is_system_message?: boolean;
+  _isNew?: boolean; // For animation purposes
 }
 
 interface ChatRoom {
@@ -33,10 +36,15 @@ interface ChatRoom {
   recipient_id?: string;
   recipient?: {
     id: string;
-    full_name: string;
+    full_name: string | null;
     email: string;
     avatar_url: string | null;
   };
+  members?: {
+    id: string;
+    full_name: string | null;
+    email: string;
+  }[];
 }
 
 interface Business {
@@ -53,11 +61,13 @@ export default function Chat() {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [loading, setLoading] = useState(true);
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isMobileView, setIsMobileView] = useState(false);
   const [showChatList, setShowChatList] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -88,7 +98,10 @@ export default function Chat() {
   useEffect(() => {
     if (selectedChat) {
       setLoadingMessages(true);
-      fetchMessages(selectedChat);
+      fetchMessages(selectedChat).then(() => {
+        // Mark messages as read when chat is opened
+        markMessagesAsRead(selectedChat.business_id);
+      });
       if (isMobileView) {
         setShowChatList(false);
       }
@@ -109,9 +122,19 @@ export default function Chat() {
           fetchSenderDetails(payload.new.sender_id).then(sender => {
             const newMessage = {
               ...payload.new,
-              sender
+              sender,
+              _isNew: true // Mark new messages for animation
             } as ChatMessage;
             setMessages(prev => [...prev, newMessage]);
+            
+            // After animation time, remove the _isNew flag
+            setTimeout(() => {
+              setMessages(prev => 
+                prev.map(msg => 
+                  msg.id === newMessage.id ? {...msg, _isNew: false} : msg
+                )
+              );
+            }, 500);
           });
         })
         .subscribe();
@@ -162,6 +185,22 @@ export default function Chat() {
     }
   };
 
+  const markMessagesAsRead = async (businessId: string) => {
+    try {
+      await supabase.rpc('mark_messages_as_read', {
+        p_business_id: businessId,
+        p_recipient_id: user?.id
+      });
+      
+      // Update local state to reflect read status
+      setChatRooms(prev => prev.map(chat => 
+        chat.business_id === businessId ? { ...chat, unread_count: 0 } : chat
+      ));
+    } catch (error) {
+      console.error('Error marking messages as read:', error);
+    }
+  };
+
   const fetchChatRooms = async () => {
     try {
       setLoading(true);
@@ -177,19 +216,20 @@ export default function Chat() {
             .eq('is_private', false)
             .order('created_at', { ascending: false })
             .limit(1)
-            .maybeSingle(); // Changed from .single() to .maybeSingle()
+            .maybeSingle();
           
           // Calculate timestamp 2 days ago in JavaScript instead of using SQL
           const twoDaysAgo = new Date();
           twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-          
-          // Get unread count
-          const { count, error: countError } = await supabase
-            .from('chat_messages')
-            .select('*', { count: 'exact', head: true })
-            .eq('business_id', business.id)
-            .eq('is_private', false)
-            .gt('created_at', twoDaysAgo.toISOString());
+
+          // Get unread count using the new RPC function
+          const { data: unreadCount, error: countError } = await supabase
+            .rpc('get_business_unread_count', {
+              p_business_id: business.id,
+              p_user_id: user?.id
+            });
+
+          if (countError) throw countError;
             
           return {
             id: `group-${business.id}`,
@@ -197,7 +237,7 @@ export default function Chat() {
             last_message: latestMessage?.message || '',
             last_message_time: latestMessage?.created_at || '',
             type: 'group' as ChatType,
-            unread_count: count || 0,
+            unread_count: unreadCount || 0,
             business_id: business.id,
             business_name: business.name
           };
@@ -252,13 +292,20 @@ export default function Chat() {
           const chatId = `private-${message.business_id}-${recipientData.id}`;
           
           if (!processedPrivateChats[chatId]) {
+            // Get unread count for private chat
+            const { data: unreadCount } = await supabase
+              .rpc('get_business_unread_count', {
+                p_business_id: message.business_id,
+                p_user_id: user?.id
+              });
+            
             processedPrivateChats[chatId] = {
               id: chatId,
               name: recipientData.full_name || recipientData.email,
               last_message: message.message,
               last_message_time: message.created_at,
               type: 'private',
-              unread_count: 0,
+              unread_count: unreadCount || 0,
               business_id: message.business_id,
               business_name: business.name,
               recipient_id: recipientData.id,
@@ -290,13 +337,20 @@ export default function Chat() {
           const chatId = `private-${message.business_id}-${senderData.id}`;
           
           if (!processedPrivateChats[chatId]) {
+            // Get unread count for private chat
+            const { data: unreadCount } = await supabase
+              .rpc('get_business_unread_count', {
+                p_business_id: message.business_id,
+                p_user_id: user?.id
+              });
+            
             processedPrivateChats[chatId] = {
               id: chatId,
               name: senderData.full_name || senderData.email,
               last_message: message.message,
               last_message_time: message.created_at,
               type: 'private',
-              unread_count: 0,
+              unread_count: unreadCount || 0,
               business_id: message.business_id,
               business_name: business.name,
               recipient_id: senderData.id,
@@ -338,7 +392,7 @@ export default function Chat() {
         // Group chat - fetch messages directly without join
         const { data: messageData, error: messageError } = await supabase
           .from('chat_messages')
-          .select('id, message, created_at, sender_id')
+          .select('id, message, created_at, sender_id, is_system_message')
           .eq('business_id', chat.business_id)
           .eq('is_private', false)
           .order('created_at', { ascending: true });
@@ -357,7 +411,7 @@ export default function Chat() {
         // Private chat - fetch messages directly without join
         const { data: messageData, error: messageError } = await supabase
           .from('chat_messages')
-          .select('id, message, created_at, sender_id')
+          .select('id, message, created_at, sender_id, is_system_message')
           .eq('business_id', chat.business_id)
           .eq('is_private', true)
           .or(`sender_id.eq.${user?.id},recipient_id.eq.${user?.id}`)
@@ -404,6 +458,20 @@ export default function Chat() {
     }
   };
 
+  const handleTyping = () => {
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    
+    setIsTyping(true);
+    
+    // Set a new timeout to clear the typing state
+    typingTimeoutRef.current = setTimeout(() => {
+      setIsTyping(false);
+    }, 1000);
+  };
+
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -412,25 +480,62 @@ export default function Chat() {
     try {
       setSendingMessage(true);
       
+      // Optimistically add the message
+      const optimisticMessage: ChatMessage = {
+        id: `temp-${Date.now()}`,
+        message: newMessage.trim(),
+        created_at: new Date().toISOString(),
+        sender_id: user.id,
+        sender: {
+          id: user.id,
+          full_name: user.user_metadata?.full_name || null,
+          email: user.email || '',
+          avatar_url: user.user_metadata?.avatar_url || null
+        },
+        _isNew: true
+      };
+      
+      setMessages(prev => [...prev, optimisticMessage]);
+      setNewMessage('');
+      
+      // Actually send the message
       const messageData = {
         business_id: selectedChat.business_id,
-        message: newMessage.trim(),
+        message: optimisticMessage.message,
         user_id: user.id,
         sender_id: user.id,
         is_private: selectedChat.type === 'private',
         recipient_id: selectedChat.type === 'private' ? selectedChat.recipient_id : null
       };
       
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('chat_messages')
-        .insert(messageData);
+        .insert(messageData)
+        .select()
+        .single();
         
       if (error) throw error;
       
-      setNewMessage('');
+      // Replace optimistic message with actual one
+      setMessages(prev => prev.map(msg => 
+        msg.id === optimisticMessage.id ? {...data, sender: optimisticMessage.sender, _isNew: true} : msg
+      ));
+      
+      // After animation time, remove the _isNew flag
+      setTimeout(() => {
+        setMessages(prev => 
+          prev.map(msg => 
+            msg.id === data.id ? {...msg, _isNew: false} : msg
+          )
+        );
+      }, 500);
     } catch (error) {
       console.error('Error sending message:', error);
       toast.error('Failed to send message');
+      
+      // Remove optimistic message on error
+      setMessages(prev => prev.filter(msg => !msg.id.startsWith('temp-')));
+      setNewMessage(optimisticMessage.message); // Restore message to input
     } finally {
       setSendingMessage(false);
     }
@@ -535,6 +640,11 @@ export default function Chat() {
                       {chat.last_message || `Start chatting in ${chat.business_name}`}
                     </p>
                   </div>
+                  {chat.unread_count > 0 && (
+                    <div className="ml-2 w-5 h-5 bg-neon-blue rounded-full flex items-center justify-center">
+                      <span className="text-xs font-bold text-white">{chat.unread_count}</span>
+                    </div>
+                  )}
                 </button>
               ))}
             </div>
@@ -551,32 +661,59 @@ export default function Chat() {
       <div className="flex-1 flex flex-col bg-highlight-blue/50 backdrop-blur-xl rounded-r-xl overflow-hidden">
         {selectedChat ? (
           <>
-            <div className="px-6 py-4 border-b border-light-blue/30 flex items-center bg-highlight-blue/30 backdrop-blur-xl">
-              {isMobileView && (
-                <button
-                  onClick={() => setShowChatList(true)}
-                  className="mr-3 text-gray-400 hover:text-white transition-colors"
-                >
-                  <ChevronLeft className="w-5 h-5" />
-                </button>
-              )}
-              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-neon-blue/10 flex items-center justify-center overflow-hidden mr-3 border-2 border-neon-blue/20">
-                {selectedChat.type === 'group' ? (
-                  <Users className="w-4 h-4 text-neon-blue" />
-                ) : selectedChat.recipient?.avatar_url ? (
-                  <img
-                    src={selectedChat.recipient.avatar_url}
-                    alt={selectedChat.name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <User className="w-4 h-4 text-neon-blue" />
+            <div className="px-6 py-4 border-b border-light-blue/30 flex items-center justify-between bg-highlight-blue/30 backdrop-blur-xl">
+              <div className="flex items-center">
+                {isMobileView && (
+                  <button
+                    onClick={() => setShowChatList(true)}
+                    className="mr-3 text-gray-400 hover:text-white transition-colors"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
                 )}
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-neon-blue/10 flex items-center justify-center overflow-hidden mr-3 border-2 border-neon-blue/20">
+                  {selectedChat.type === 'group' ? (
+                    <Users className="w-4 h-4 text-neon-blue" />
+                  ) : selectedChat.recipient?.avatar_url ? (
+                    <img
+                      src={selectedChat.recipient.avatar_url}
+                      alt={selectedChat.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <User className="w-4 h-4 text-neon-blue" />
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-medium text-white">{selectedChat.name}</h3>
+                  <p className="text-xs text-gray-400">{selectedChat.business_name}</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-medium text-white">{selectedChat.name}</h3>
-                <p className="text-xs text-gray-400">{selectedChat.business_name}</p>
-              </div>
+              
+              {selectedChat.type === 'group' && selectedChat.members && (
+                <div className="flex items-center">
+                  <div className="flex -space-x-2">
+                    {selectedChat.members.slice(0, 3).map((member, i) => (
+                      <div 
+                        key={member.id}
+                        className="w-7 h-7 rounded-full bg-light-blue/80 border-2 border-highlight-blue flex items-center justify-center overflow-hidden"
+                        title={member.full_name || member.email}
+                      >
+                        <span className="text-xs font-medium">
+                          {(member.full_name?.[0] || member.email[0]).toUpperCase()}
+                        </span>
+                      </div>
+                    ))}
+                    {(selectedChat.members.length > 3) && (
+                      <div className="w-7 h-7 rounded-full bg-neon-blue/20 border-2 border-highlight-blue flex items-center justify-center">
+                        <span className="text-xs font-medium text-neon-blue">
+                          +{selectedChat.members.length - 3}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             
             <div className="flex-1 overflow-y-auto p-4">
@@ -596,18 +733,24 @@ export default function Chat() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {/* Sticky header */}
-                  <div className="sticky top-0 left-0 right-0 z-10 flex justify-center py-2">
-                    <div className="px-4 py-1.5 bg-highlight-blue/70 backdrop-blur-sm rounded-full text-sm text-gray-300 shadow-lg">
-                      {selectedChat.business_name} • {selectedChat.type === 'group' ? 'Group Chat' : 'Private Chat'}
-                    </div>
-                  </div>
                   {/* Messages */}
+                  {/* System message at top */}
+                  {messages.find(m => m.is_system_message) && (
+                    <div className="flex justify-center mb-6">
+                      <div className="px-4 py-2 bg-highlight-blue/70 backdrop-blur-sm rounded-lg text-sm text-gray-300 shadow-lg">
+                        {messages.find(m => m.is_system_message)?.message}
+                      </div>
+                    </div>
+                  )}
+                  
                   {messages.map((message, index) => {
                     const isFirstOfDay = index === 0 || 
                       formatDate(message.created_at) !== formatDate(messages[index - 1].created_at);
                     
                     const isCurrentUser = message.sender_id === user?.id;
+                    
+                    // Skip system messages as they're shown at the top
+                    if (message.is_system_message) return null;
                     
                     return (
                       <div key={message.id}>
@@ -629,7 +772,7 @@ export default function Chat() {
                             
                             <div className="flex items-end gap-2">
                               {!isCurrentUser && (
-                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-light-blue/30 flex items-center justify-center overflow-hidden border border-light-blue/30">
+                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-light-blue/30 flex items-center justify-center overflow-hidden border border-light-blue/30 avatar-bounce">
                                   {message.sender?.avatar_url ? (
                                     <img
                                       src={message.sender.avatar_url}
@@ -644,15 +787,13 @@ export default function Chat() {
                                 </div>
                               )}
                               
-                              <div className={`rounded-xl py-2 px-4 ${
-                                isCurrentUser 
-                                  ? 'bg-neon-blue text-white rounded-br-none shadow-lg'
-                                  : message.is_system_message
-                                    ? 'bg-gray-500/20 backdrop-blur-sm text-gray-300 rounded-lg shadow-lg'
-                                  : message.is_system_message
-                                    ? 'bg-gray-500/20 backdrop-blur-sm text-gray-300 rounded-lg shadow-lg'
-                                    : 'bg-light-blue/50 backdrop-blur-sm text-white rounded-bl-none shadow-lg'
-                              }`}>
+                              <div 
+                                className={`rounded-xl py-2 px-4 ${
+                                  isCurrentUser 
+                                    ? 'bg-neon-blue text-white rounded-br-none shadow-lg message-bubble-right' 
+                                    : 'bg-light-blue/50 backdrop-blur-sm text-white rounded-bl-none shadow-lg message-bubble-left'
+                                } ${message._isNew ? 'message-bubble-new' : ''}`}
+                              >
                                 <p>{message.message}</p>
                                 <p className="text-xs opacity-70 mt-1">
                                   {formatTime(message.created_at)}
@@ -664,6 +805,27 @@ export default function Chat() {
                       </div>
                     );
                   })}
+                  
+                  {/* Typing indicator */}
+                  {isTyping && (
+                    <div className="flex justify-start">
+                      <div className="max-w-[75%] order-1">
+                        <div className="flex items-end gap-2">
+                          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-light-blue/30 flex items-center justify-center overflow-hidden border border-light-blue/30">
+                            <span className="text-xs text-white">?</span>
+                          </div>
+                          <div className="rounded-xl py-2 px-4 bg-light-blue/30 backdrop-blur-sm text-white rounded-bl-none shadow-lg">
+                            <div className="typing-indicator">
+                              <span></span>
+                              <span></span>
+                              <span></span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
                   <div ref={messagesEndRef} />
                 </div>
               )}
@@ -675,7 +837,10 @@ export default function Chat() {
                   autoComplete="off"
                   type="text"
                   value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
+                  onChange={(e) => {
+                    setNewMessage(e.target.value);
+                    handleTyping();
+                  }}
                   placeholder="Type a message..."
                   className="flex-1 px-4 py-2.5 bg-light-blue/50 border border-light-blue/30 rounded-lg text-white focus:outline-none focus:border-neon-blue/50 focus:bg-light-blue/80 transition-all duration-200 placeholder-gray-400"
                   disabled={sendingMessage}
@@ -683,9 +848,13 @@ export default function Chat() {
                 <button
                   type="submit"
                   disabled={!newMessage.trim() || sendingMessage}
-                  className="p-2.5 bg-neon-blue text-white rounded-lg hover:bg-blue-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
+                  className="p-2.5 bg-neon-blue text-white rounded-lg hover:bg-blue-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 btn-pulse"
                 >
-                  <Send className="w-5 h-5" />
+                  {sendingMessage ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Send className="w-5 h-5" />
+                  )}
                 </button>
               </div>
             </form>
@@ -717,7 +886,7 @@ export default function Chat() {
           <h1 className="text-2xl font-bold text-white">Chat</h1>
           <button
             onClick={() => setShowNewChatModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-neon-blue/10 hover:bg-neon-blue/20 text-neon-blue rounded-lg transition-all duration-200 border border-neon-blue/20"
+            className="flex items-center gap-2 px-4 py-2 bg-neon-blue/10 hover:bg-neon-blue/20 text-neon-blue rounded-lg transition-all duration-200 border border-neon-blue/20 hover:scale-105 active:scale-95"
           >
             <Plus className="w-4 h-4" />
             New Chat
@@ -729,7 +898,7 @@ export default function Chat() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-neon-blue"></div>
           </div>
         ) : (
-          <div className="flex-1 flex overflow-hidden rounded-xl shadow-2xl shadow-black/20">
+          <div className="flex-1 flex overflow-hidden rounded-xl shadow-2xl shadow-black/20 animate-fade-in">
             {renderChatList()}
             {renderChatWindow()}
           </div>
