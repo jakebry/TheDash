@@ -3,9 +3,9 @@
 
   1. Changes
     - Add trigger to sync business member roles with profile roles
-    - Fix business creation to use correct role type
-    - Add constraint to ensure role matches user_role type
-    
+    - Fix business creation to assign the creator as a member
+    - Leave business_members.role as TEXT (not enum)
+
   2. Security
     - Use security definer for proper access control
     - Maintain proper role assignments
@@ -14,10 +14,7 @@
 -- Drop existing trigger if it exists
 DROP TRIGGER IF EXISTS sync_member_role_trigger ON public.business_members;
 
--- Alter business_members table to use user_role type
-ALTER TABLE business_members 
-ALTER COLUMN role TYPE user_role 
-USING role::user_role;
+-- ✅ Do NOT cast business_members.role to enum — keep it as TEXT
 
 -- Create function to sync member role with profile
 CREATE OR REPLACE FUNCTION sync_member_role()
@@ -25,14 +22,14 @@ RETURNS trigger AS $$
 DECLARE
   profile_role user_role;
 BEGIN
-  -- Get the user's role from profiles
+  -- Get the user's global role from profiles
   SELECT role INTO profile_role
   FROM profiles
   WHERE id = NEW.user_id;
 
-  -- Set the member role to match profile role
-  NEW.role := profile_role;
-  
+  -- Assign that global role into a business member context (as text)
+  NEW.role := profile_role::text;
+
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -43,24 +40,24 @@ CREATE TRIGGER sync_member_role_trigger
   FOR EACH ROW
   EXECUTE FUNCTION sync_member_role();
 
--- Fix existing member roles
+-- Sync existing business_members.role to match profile.role
 UPDATE business_members bm
-SET role = p.role
+SET role = p.role::text
 FROM profiles p
 WHERE bm.user_id = p.id;
 
--- Fix business creation trigger to use correct role type
+-- Fix business creation trigger to assign the creator to their business
 CREATE OR REPLACE FUNCTION handle_business_creation()
 RETURNS trigger AS $$
 DECLARE
   creator_role user_role;
 BEGIN
-  -- Get creator's role from profiles
+  -- Get creator's global role from profiles
   SELECT role INTO creator_role
   FROM profiles
   WHERE id = NEW.created_by;
 
-  -- Add the business creator as a member with their profile role
+  -- Add the business creator as a member with that role
   INSERT INTO public.business_members (
     business_id,
     user_id,
@@ -68,9 +65,9 @@ BEGIN
   ) VALUES (
     NEW.id,
     NEW.created_by,
-    creator_role
+    creator_role::text
   );
-  
+
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

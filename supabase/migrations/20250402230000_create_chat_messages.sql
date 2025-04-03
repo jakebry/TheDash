@@ -5,18 +5,11 @@
     - Ensure chat_messages table has the correct structure
     - Add proper foreign key constraints between chat_messages and profiles
     - Drop and recreate RLS policies to avoid conflicts
-    
+
   2. Security
     - Enable row level security
     - Create appropriate policies for group and private messages
 */
-
--- First drop any problematic policies to avoid conflicts
-DROP POLICY IF EXISTS "Users can read group chat in their business" ON public.chat_messages;
-DROP POLICY IF EXISTS "Users can read private messages they're involved in" ON public.chat_messages;
-DROP POLICY IF EXISTS "Users can send messages in their business" ON public.chat_messages;
-DROP POLICY IF EXISTS "Users can send messages to their business" ON public.chat_messages;
-DROP POLICY IF EXISTS "Users can view messages from their business" ON public.chat_messages;
 
 -- Ensure chat_messages table exists with correct structure
 CREATE TABLE IF NOT EXISTS public.chat_messages (
@@ -33,7 +26,6 @@ CREATE TABLE IF NOT EXISTS public.chat_messages (
 -- Add explicit foreign key constraints with named relationships
 DO $$ 
 BEGIN
-  -- Add recipient_id foreign key if it doesn't exist
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint 
     WHERE conname = 'chat_messages_recipient_id_fkey'
@@ -43,7 +35,6 @@ BEGIN
     FOREIGN KEY (recipient_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
   END IF;
 
-  -- Add sender_id foreign key if it doesn't exist
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint 
     WHERE conname = 'chat_messages_sender_id_fkey'
@@ -57,8 +48,15 @@ END $$;
 -- Enable row level security
 ALTER TABLE public.chat_messages ENABLE ROW LEVEL SECURITY;
 
+-- Now it's safe to drop old policies (if they exist)
+DROP POLICY IF EXISTS "Users can read group chat in their business" ON public.chat_messages;
+DROP POLICY IF EXISTS "Users can read private messages they're involved in" ON public.chat_messages;
+DROP POLICY IF EXISTS "Users can send messages in their business" ON public.chat_messages;
+DROP POLICY IF EXISTS "Users can send messages to their business" ON public.chat_messages;
+DROP POLICY IF EXISTS "Users can view messages from their business" ON public.chat_messages;
+
 -- Recreate all necessary policies
--- Users can read group chat in their business
+
 CREATE POLICY "Users can read group chat in their business"
   ON public.chat_messages
   FOR SELECT
@@ -74,7 +72,6 @@ CREATE POLICY "Users can read group chat in their business"
     )
   );
 
--- Users can read private messages they're involved in
 CREATE POLICY "Users can read private messages they're involved in"
   ON public.chat_messages
   FOR SELECT
@@ -85,7 +82,6 @@ CREATE POLICY "Users can read private messages they're involved in"
     )
   );
 
--- Users can send messages in their business
 CREATE POLICY "Users can send messages in their business"
   ON public.chat_messages
   FOR INSERT
@@ -99,7 +95,6 @@ CREATE POLICY "Users can send messages in their business"
     )
   );
 
--- Users can send messages to their business
 CREATE POLICY "Users can send messages to their business"
   ON public.chat_messages
   FOR INSERT
@@ -112,7 +107,6 @@ CREATE POLICY "Users can send messages to their business"
     )
   );
 
--- Users can view messages from their business
 CREATE POLICY "Users can view messages from their business"
   ON public.chat_messages
   FOR SELECT
