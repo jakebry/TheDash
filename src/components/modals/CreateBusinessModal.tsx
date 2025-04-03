@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/useAuth';
 import { useRole } from '../../hooks/useRole';
+import { refreshSession } from '../../lib/tokenRefresh';
 import toast from 'react-hot-toast';
 
 interface CreateBusinessModalProps {

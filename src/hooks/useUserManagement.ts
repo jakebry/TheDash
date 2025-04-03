@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { refreshSession } from '../lib/tokenRefresh';
 import toast from 'react-hot-toast';
 
 export type User = {
@@ -53,8 +54,12 @@ export function useUserManagement() {
         throw new Error(data?.error || 'Role update failed');
       }
 
+      // Use throttled token refresh
+      await refreshSession(supabase);
       await supabase.rpc('sync_profile_role_to_auth');
-      await supabase.auth.refreshSession();
+      
+      // Throttled refresh again to ensure JWT is updated
+      await refreshSession(supabase);
       await supabase.rpc('force_jwt_refresh');
 
       // Update local state

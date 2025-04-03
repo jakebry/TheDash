@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { refreshSession } from '../lib/tokenRefresh';
 
 /**
  * Custom hook to fetch and track a user's role from Supabase metadata or profiles.
@@ -11,7 +12,7 @@ export function useRole(userId: string | null = null) {
   useEffect(() => {
     const getRole = async () => {
       try {
-        await supabase.auth.refreshSession();
+        await refreshSession(supabase);
         const { data: sessionData } = await supabase.auth.getSession();
         const sessionUser = sessionData?.session?.user;
 
@@ -106,7 +107,7 @@ export function useRole(userId: string | null = null) {
   const refreshRole = async () => {
     setLoading(true);
     try {
-      await supabase.auth.refreshSession(); // ✅ Proactive refresh
+      await refreshSession(supabase); // Use throttled refresh
 
       const { data: roleData } = await supabase.rpc('get_all_auth_roles', {
         target_id: userId

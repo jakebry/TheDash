@@ -1,9 +1,10 @@
-import { Home, MessageSquare, Clock, Building2, LogOut, Settings as SettingsIcon, Shield } from 'lucide-react';
+import { Home, MessageSquare, Clock, Building2, LogOut, Settings as SettingsIcon, Shield, Briefcase } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/useAuth';
 import { useRole } from '../hooks/useRole';
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { refreshSession } from '../lib/tokenRefresh';
 
 export default function Sidebar() {
   const location = useLocation();
@@ -82,6 +83,7 @@ export default function Sidebar() {
   const links = [
     { icon: Home, label: 'Dashboard', path: '/dashboard' },
     { icon: Building2, label: 'Business', path: '/business' },
+    { icon: Briefcase, label: 'Projects', path: '/projects' },
     { icon: Clock, label: 'Time Clock', path: '/time-clock' },
     { icon: MessageSquare, label: 'Chat', path: '/chat' },
     { icon: SettingsIcon, label: 'Settings', path: '/settings' },
@@ -98,7 +100,7 @@ export default function Sidebar() {
         <ul className="space-y-2">
           {links.map((link) => {
             const Icon = link.icon;
-            const isActive = location.pathname === link.path;
+            const isActive = location.pathname.startsWith(link.path);
             return (
               <li key={link.path}>
                 <Link

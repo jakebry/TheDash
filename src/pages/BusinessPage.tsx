@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Users, Settings, Calendar, MessageSquare, FileText, Edit } from 'lucide-react';
+import { Building2, Users, Settings, Calendar, MessageSquare, FileText, Edit, Briefcase } from 'lucide-react';
 import Layout from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/useAuth';
@@ -49,10 +49,19 @@ export default function BusinessPage() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  const [projectsCount, setProjectsCount] = useState(0);
 
   useEffect(() => {
     fetchUserBusinesses();
   }, [user]);
+
+  useEffect(() => {
+    if (selectedBusiness) {
+      fetchUnreadMessageCounts();
+      fetchProjectsCount();
+    }
+  }, [selectedBusiness]);
 
   // Set up real-time listener for business changes
   useEffect(() => {
@@ -161,6 +170,40 @@ export default function BusinessPage() {
     }
   };
 
+  const fetchProjectsCount = async () => {
+    try {
+      const { count, error } = await supabase
+        .from('projects')
+        .select('*', { count: 'exact', head: true })
+        .eq('business_id', selectedBusiness?.id)
+        .eq('status', 'active');
+
+      if (error) throw error;
+      
+      setProjectsCount(count || 0);
+    } catch (error) {
+      console.error('Error fetching projects count:', error);
+    }
+  };
+
+  const fetchUnreadMessageCounts = async () => {
+    try {
+      // Get unread count using the new RPC function
+      const { data: unreadCount, error } = await supabase
+        .rpc('get_business_unread_count', {
+          p_business_id: selectedBusiness?.id,
+          p_user_id: user?.id
+        });
+
+      if (error) throw error;
+
+      // Set the unread count in state
+      setUnreadCounts({ total: unreadCount || 0 });
+    } catch (error) {
+      console.error('Error fetching unread counts:', error);
+    }
+  };
+
   const checkOwnerStatus = (business: Business) => {
     // User is owner if they created the business
     setIsOwner(user?.id === business.created_by);
@@ -247,16 +290,17 @@ export default function BusinessPage() {
           />
           
           <StatCard 
-            icon={<Calendar className="w-5 h-5 text-emerald-500" />}
+            icon={<Briefcase className="w-5 h-5 text-emerald-500" />}
             label="Active Projects"
-            value="3"
-            onClick={() => {/* TODO: Navigate to projects */}}
+            value={projectsCount.toString()}
+            onClick={() => navigate(`/projects/${selectedBusiness.id}`)}
           />
           
           <StatCard 
             icon={<MessageSquare className="w-5 h-5 text-yellow-500" />}
             label="Messages"
-            value="12"
+            value={(unreadCounts.total || 0).toString()}
+            subtitle="unread"
             onClick={() => navigate('/chat')}
           />
         </div>
@@ -306,9 +350,9 @@ export default function BusinessPage() {
               time="2 hours ago"
             />
             <ActivityItem 
-              icon={<FileText className="w-4 h-4 text-emerald-500" />}
-              title="Report generated"
-              description="Monthly sales report was generated"
+              icon={<Briefcase className="w-4 h-4 text-emerald-500" />}
+              title="New project created"
+              description="Highland Towers Construction project was created"
               time="1 day ago"
             />
             <ActivityItem 
@@ -441,7 +485,13 @@ export default function BusinessPage() {
     }
   };
 
-  const StatCard = ({ icon, label, value, onClick }: { icon: React.ReactNode; label: string; value: string; onClick?: () => void }) => {
+  const StatCard = ({ icon, label, value, subtitle, onClick }: { 
+    icon: React.ReactNode; 
+    label: string; 
+    value: string; 
+    subtitle?: string;
+    onClick?: () => void 
+  }) => {
     return (
       <div 
         className={`bg-highlight-blue text-white rounded-xl p-4 flex items-center space-x-4 ${onClick ? 'cursor-pointer hover:bg-light-blue transition-colors' : ''}`}
@@ -450,7 +500,10 @@ export default function BusinessPage() {
         <div className="text-2xl">{icon}</div>
         <div>
           <div className="text-sm text-gray-300">{label}</div>
-          <div className="text-xl font-semibold">{value}</div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl font-semibold">{value}</span>
+            {subtitle && <span className="text-sm text-gray-400">{subtitle}</span>}
+          </div>
         </div>
       </div>
     );
