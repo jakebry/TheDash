@@ -94,11 +94,5 @@ export const refreshSession = async (supabase: TypedSupabase): Promise<void> => 
  */
 export const forceJwtRefresh = async (supabase: TypedSupabase): Promise<void> => {
   await refreshSession(supabase);
-  try {
-    if (consecutiveFailures === 0) {
-      await supabase.rpc('force_jwt_refresh');
-    }
-  } catch (error) {
-    console.error('Error forcing JWT refresh:', error);
-  }
+  // Removed problematic force_jwt_refresh call
 };

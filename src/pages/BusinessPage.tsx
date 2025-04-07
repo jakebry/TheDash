@@ -1,41 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Users, Settings, Calendar, MessageSquare, FileText, Edit, Briefcase } from 'lucide-react';
+import { Building2, Users, MessageSquare } from 'lucide-react';
 import Layout from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/useAuth';
 import { BusinessInviteModal } from '../components/business/BusinessInviteModal';
 import toast from 'react-hot-toast';
-
-interface BusinessMember {
-  id: string;
-  user_id: string;
-  role: 'admin' | 'business' | 'user';
-  joined_at: string;
-  profile: {
-    full_name: string;
-    email: string;
-    avatar_url: string | null;
-  };
-}
-
-interface Business {
-  id: string;
-  name: string;
-  description: string | null;
-  logo_url: string | null;
-  phone_number: string | null;
-  address: string | null;
-  website: string | null;
-  created_at: string;
-  created_by: string;
-  owner?: {
-    id: string;
-    full_name: string;
-    email: string;
-  };
-  members?: BusinessMember[];
-}
+import { Business, BusinessMember, BusinessRole } from '../types/business';
 
 type Tab = 'overview' | 'members' | 'settings';
 
@@ -153,17 +124,49 @@ export default function BusinessPage() {
 
   const fetchBusinessMembers = async (businessId: string) => {
     try {
-      const { data, error } = await supabase
+      // First fetch all business members with their profiles
+      const { data: membersData, error: membersError } = await supabase
         .from('business_members')
         .select(`
-          *,
+          id,
+          user_id,
+          role,
+          joined_at,
           profile:profiles(id, full_name, email, avatar_url)
         `)
         .eq('business_id', businessId);
         
-      if (error) throw error;
+      if (membersError) throw membersError;
       
-      setMembers(data as BusinessMember[] || []);
+      // Next, get the business roles from business_user_roles table
+      const { data: businessRolesData, error: businessRolesError } = await supabase
+        .from('business_user_roles')
+        .select('user_id, role')
+        .eq('business_id', businessId);
+      
+      if (businessRolesError) throw businessRolesError;
+      
+      // Create a map of user_id to business role for quick lookup
+      const businessRoleMap = new Map<string, string>();
+      
+      if (businessRolesData) {
+        businessRolesData.forEach(role => {
+          businessRoleMap.set(role.user_id, role.role);
+        });
+      }
+      
+      // Merge the business role data with the members data
+      const membersWithRoles = membersData ? membersData.map(member => {
+        // Get business role from map or default to 'employee'
+        const businessRole = businessRoleMap.get(member.user_id) || 'employee';
+        
+        return {
+          ...member,
+          business_role: businessRole as BusinessRole
+        };
+      }) : [];
+      
+      setMembers(membersWithRoles as BusinessMember[]);
     } catch (error) {
       console.error('Error fetching members:', error);
       toast.error('Failed to load team members');
@@ -188,7 +191,7 @@ export default function BusinessPage() {
 
   const fetchUnreadMessageCounts = async () => {
     try {
-      // Get unread count using the new RPC function
+      // Get unread count using the RPC function
       const { data: unreadCount, error } = await supabase
         .rpc('get_business_unread_count', {
           p_business_id: selectedBusiness?.id,
@@ -273,7 +276,7 @@ export default function BusinessPage() {
                 onClick={() => setActiveTab('settings')}
                 className="flex items-center gap-2 px-3 py-2 bg-neon-blue text-white rounded-lg hover:bg-blue-600 transition-colors"
               >
-                <Edit className="w-4 h-4" />
+                <Building2 className="w-4 h-4" />
                 Manage Business
               </button>
             )}
@@ -290,7 +293,7 @@ export default function BusinessPage() {
           />
           
           <StatCard 
-            icon={<Briefcase className="w-5 h-5 text-emerald-500" />}
+            icon={<Building2 className="w-5 h-5 text-emerald-500" />}
             label="Active Projects"
             value={projectsCount.toString()}
             onClick={() => navigate(`/projects/${selectedBusiness.id}`)}
@@ -350,7 +353,7 @@ export default function BusinessPage() {
               time="2 hours ago"
             />
             <ActivityItem 
-              icon={<Briefcase className="w-4 h-4 text-emerald-500" />}
+              icon={<Building2 className="w-4 h-4 text-emerald-500" />}
               title="New project created"
               description="Highland Towers Construction project was created"
               time="1 day ago"
@@ -369,6 +372,41 @@ export default function BusinessPage() {
 
   const BusinessMembers = () => {
     if (!selectedBusiness) return null;
+    
+    // Business role-specific colors
+    const businessRoleColors = {
+      owner: 'bg-amber-500',
+      supervisor: 'bg-green-500',
+      lead: 'bg-cyan-500',
+      employee: 'bg-blue-400'
+    };
+    
+    const roleColors = {
+      admin: 'bg-purple-500',
+      business: 'bg-emerald-500',
+      user: 'bg-blue-500',
+    };
+    
+    const handleUpdateBusinessRole = async (userId: string, newRole: BusinessRole) => {
+      if (!selectedBusiness) return;
+      
+      try {
+        const { data, error } = await supabase.rpc('update_business_role', {
+          p_business_id: selectedBusiness.id,
+          p_user_id: userId,
+          p_role: newRole
+        });
+        
+        if (error) throw error;
+        
+        // Refresh the member list to show updated roles
+        fetchBusinessMembers(selectedBusiness.id);
+        toast.success(`Role updated to ${newRole}`);
+      } catch (error) {
+        console.error('Error updating business role:', error);
+        toast.error('Failed to update business role');
+      }
+    };
     
     return (
       <div className="space-y-6">
@@ -391,7 +429,8 @@ export default function BusinessPage() {
               <thead>
                 <tr className="text-left border-b border-gray-700">
                   <th className="pb-3 text-gray-400 font-medium">Member</th>
-                  <th className="pb-3 text-gray-400 font-medium">Role</th>
+                  <th className="pb-3 text-gray-400 font-medium">App Role</th>
+                  <th className="pb-3 text-gray-400 font-medium">Business Role</th>
                   <th className="pb-3 text-gray-400 font-medium">Joined</th>
                   {isOwner && <th className="pb-3 text-gray-400 font-medium">Actions</th>}
                 </tr>
@@ -399,7 +438,7 @@ export default function BusinessPage() {
               <tbody className="divide-y divide-gray-700">
                 {members.length === 0 ? (
                   <tr>
-                    <td colSpan={isOwner ? 4 : 3} className="py-4 text-center text-gray-400">
+                    <td colSpan={isOwner ? 5 : 4} className="py-4 text-center text-gray-400">
                       No team members found
                     </td>
                   </tr>
@@ -429,12 +468,33 @@ export default function BusinessPage() {
                       </td>
                       <td className="py-4">
                         <span className={`px-2 py-1 rounded-md text-xs font-medium text-white ${
-                          member.role === 'admin' ? 'bg-purple-500' : 
-                          member.role === 'business' ? 'bg-emerald-500' : 
-                          'bg-blue-500'
+                          roleColors[member.role as keyof typeof roleColors] || 'bg-gray-500'
                         }`}>
                           {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
                         </span>
+                      </td>
+                      <td className="py-4">
+                        {isOwner && member.user_id !== user?.id ? (
+                          <select 
+                            value={member.business_role || 'employee'}
+                            onChange={(e) => handleUpdateBusinessRole(member.user_id, e.target.value as BusinessRole)}
+                            className="bg-light-blue text-white border border-gray-600 rounded px-2 py-1 text-sm focus:outline-none focus:border-neon-blue"
+                          >
+                            <option value="employee">Employee</option>
+                            <option value="lead">Lead</option>
+                            <option value="supervisor">Supervisor</option>
+                            <option value="owner">Owner</option>
+                          </select>
+                        ) : (
+                          <span className={`px-2 py-1 rounded-md text-xs font-medium text-white ${
+                            businessRoleColors[member.business_role as BusinessRole] || 'bg-gray-500'
+                          }`}>
+                            {member.business_role
+                              ? member.business_role.charAt(0).toUpperCase() + member.business_role.slice(1)
+                              : 'Employee'
+                            }
+                          </span>
+                        )}
                       </td>
                       <td className="py-4 text-gray-300">
                         {new Date(member.joined_at).toLocaleDateString()}

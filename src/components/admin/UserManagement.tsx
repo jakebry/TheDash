@@ -187,6 +187,7 @@ export function UserManagement() {
       const previousRole = userData?.role || 'user';
       
       // 2. Update using specialized role update function
+      // Pass newRole as a string to avoid the ambiguity issue
       const { data: updateResult, error: updateError } = await supabase
         .rpc('update_user_role_with_validation', {
           target_user_id: userId,
@@ -203,7 +204,6 @@ export function UserManagement() {
 
       // Force a session refresh using our throttled implementation
       await refreshSession(supabase);
-      await supabase.rpc('force_jwt_refresh');
       
       // 3. Update local state
       setUsers(users.map(user =>
@@ -290,8 +290,7 @@ export function UserManagement() {
       
       // 5. Force JWT refresh for admin permissions
       await refreshSession(supabase);
-      const { data: jwtData } = await supabase.rpc('force_jwt_refresh');
-      setDebugInfo(`Step 5: ${jwtData || 'Forced JWT refresh'}`);
+      // Removed problematic force_jwt_refresh call
       
       // 6. Try to repair specific profile access issues
       const { data: profileFixData } = await supabase.rpc('fix_admin_profile_access');
