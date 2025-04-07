@@ -1,17 +1,29 @@
 /*
   # Add business role management
 
-  1. New Functions
-    - `update_business_role` - Function to update a user's business-specific role
-    
-  2. Changes
-    - Add function to manage business roles
+  1. New Enums
+    - business_role: 'owner', 'supervisor', 'lead', 'employee'
+
+  2. New Functions
+    - update_business_role: Update a user's business-specific role
+    - set_default_business_role: Triggered for defaulting role to employee
+    - handle_business_creation: Sets up creator as business owner
+
+  3. Changes
     - Ensure business role defaults to 'employee' if not set
-    
-  3. Security
+    - Only business owners can update roles
+
+  4. Security
     - Use SECURITY DEFINER to ensure proper access control
-    - Only business owners can update business roles
 */
+
+-- Create the enum if it doesn't exist
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'business_role') THEN
+    CREATE TYPE business_role AS ENUM ('owner', 'supervisor', 'lead', 'employee');
+  END IF;
+END$$;
 
 -- Function to update a user's business role
 CREATE OR REPLACE FUNCTION update_business_role(
@@ -115,18 +127,16 @@ CREATE TRIGGER set_default_business_role_trigger
 CREATE OR REPLACE FUNCTION handle_business_creation()
 RETURNS trigger AS $$
 BEGIN
-  -- Add the business creator as a member with business role
+  -- Add the business creator as a member
   INSERT INTO public.business_members (
     business_id,
-    user_id,
-    role
+    user_id
   ) VALUES (
     NEW.id,
-    NEW.created_by,
-    'business'::user_role
+    NEW.created_by
   );
-  
-  -- Also set the business creator as owner in business_user_roles
+
+  -- Set the business creator as owner in business_user_roles
   INSERT INTO public.business_user_roles (
     business_id,
     user_id,
