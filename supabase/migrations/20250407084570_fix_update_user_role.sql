@@ -1,3 +1,4 @@
+-- Update the user role validation function to safely compare enum and text
 CREATE OR REPLACE FUNCTION public.update_user_role_with_validation(
   target_user_id uuid,
   new_role text
@@ -27,7 +28,7 @@ BEGIN
     );
   END IF;
 
-  -- Validate the role
+  -- Validate that the new role is a valid enum
   SELECT EXISTS (
     SELECT 1 FROM pg_enum
     WHERE enumlabel = new_role
@@ -42,24 +43,25 @@ BEGIN
     );
   END IF;
 
-  -- Get current role and user info
+  -- Get target user info and current role
   SELECT full_name, email, role INTO target_user_name, target_user_email, current_role
   FROM profiles
   WHERE id = target_user_id;
 
-  -- Only update profile if different (avoids trigger conflict)
+  -- Only update if the role is actually different
   IF current_role::text != new_role THEN
     UPDATE profiles
     SET role = new_role::user_role
     WHERE id = target_user_id;
   END IF;
 
-  -- Update auth metadata regardless
+  -- Update auth.users metadata
   UPDATE auth.users
   SET raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('role', new_role),
       raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || jsonb_build_object('role', new_role)
   WHERE id = target_user_id;
 
+  -- Return success result
   result := jsonb_build_object(
     'success', true,
     'message', format('Role updated to %s for %s', new_role, coalesce(target_user_name, target_user_email, 'user')),
