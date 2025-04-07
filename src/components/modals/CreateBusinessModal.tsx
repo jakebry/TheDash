@@ -20,33 +20,26 @@ export function CreateBusinessModal({ onClose }: CreateBusinessModalProps) {
   const { user } = useAuth();
   const { role, loading: roleLoading, refreshRole } = useRole(user?.id ?? null);
 
-  // Force a role refresh when modal opens
+  // Force a session refresh and then refresh the role
   useEffect(() => {
     const verifyBusinessAccess = async () => {
       setCheckingRole(true);
       try {
-        // Force refresh the role
+        await refreshSession(supabase);
         await refreshRole();
-        
-        // If role is still not business, try to check directly
+
         if (role !== 'business') {
-          // Try to get the role directly from all sources
           const { data } = await supabase.rpc('get_all_auth_roles');
-          
+
           if (data && (
             data.profile_role === 'business' || 
             data.user_metadata_role === 'business' || 
             data.app_metadata_role === 'business' ||
             data.jwt_role === 'business'
           )) {
-            // We have confirmed the user has business role somewhere
-            // Try to fully synchronize
             await supabase.rpc('fully_sync_user_role');
-            
-            // Refresh the role again to ensure UI updates
             await refreshRole();
-            
-            // If still not business, suggest logout/login
+
             if (role !== 'business') {
               toast.error(
                 'Your business role may not be fully active. Try logging out and back in.',
@@ -61,12 +54,11 @@ export function CreateBusinessModal({ onClose }: CreateBusinessModalProps) {
         setCheckingRole(false);
       }
     };
-    
+
     verifyBusinessAccess();
   }, []);
 
   const canCreateBusiness = () => {
-    // Allow creation if role is business OR if we have explicit business notification access
     return role === 'business' || role === 'admin';
   };
 
@@ -82,7 +74,6 @@ export function CreateBusinessModal({ onClose }: CreateBusinessModalProps) {
     try {
       setLoading(true);
 
-      // Create the business
       const { data: business, error: businessError } = await supabase
         .from('businesses')
         .insert({
@@ -98,7 +89,6 @@ export function CreateBusinessModal({ onClose }: CreateBusinessModalProps) {
 
       if (businessError) throw businessError;
 
-      // Add the creator as a business member with business role
       const { error: memberError } = await supabase
         .from('business_members')
         .insert({
@@ -122,7 +112,7 @@ export function CreateBusinessModal({ onClose }: CreateBusinessModalProps) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-highlight-blue p-6 rounded-xl w-full max-w-md relative">
-        {!canCreateBusiness() && !checkingRole && (
+        {(!canCreateBusiness() && !checkingRole && !roleLoading) && (
           <div className="absolute inset-0 bg-highlight-blue/95 flex items-center justify-center rounded-xl z-10">
             <div className="text-center p-6">
               <p className="text-red-500 font-medium mb-2">Access Denied</p>
@@ -134,8 +124,8 @@ export function CreateBusinessModal({ onClose }: CreateBusinessModalProps) {
             </div>
           </div>
         )}
-        
-        {checkingRole && (
+
+        {(checkingRole || roleLoading) && (
           <div className="absolute inset-0 bg-highlight-blue/95 flex items-center justify-center rounded-xl z-10">
             <div className="text-center p-6">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neon-blue mx-auto mb-4"></div>
@@ -143,7 +133,7 @@ export function CreateBusinessModal({ onClose }: CreateBusinessModalProps) {
             </div>
           </div>
         )}
-        
+
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-gray-400 hover:text-white"
@@ -208,7 +198,7 @@ export function CreateBusinessModal({ onClose }: CreateBusinessModalProps) {
 
           <button
             type="submit"
-            disabled={loading || !canCreateBusiness() || checkingRole}
+            disabled={loading || !canCreateBusiness() || checkingRole || roleLoading}
             className="w-full py-2 bg-neon-blue text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
           >
             {loading ? 'Creating...' : 'Create Business'}

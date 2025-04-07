@@ -1,19 +1,21 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { refreshSession } from '../lib/tokenRefresh';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { Database } from '../types/supabase'; // Make sure this exists!
 
-/**
- * Custom hook to fetch and track a user's role from Supabase metadata or profiles.
- */
+type TypedSupabase = SupabaseClient<Database>;
+
 export function useRole(userId: string | null = null) {
   const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const client = supabase as TypedSupabase;
 
   useEffect(() => {
     const getRole = async () => {
       try {
-        await refreshSession(supabase);
-        const { data: sessionData } = await supabase.auth.getSession();
+        await refreshSession(client);
+        const { data: sessionData } = await client.auth.getSession();
         const sessionUser = sessionData?.session?.user;
 
         if (!sessionUser && !userId) {
@@ -29,28 +31,17 @@ export function useRole(userId: string | null = null) {
           return;
         }
 
-        // Prioritize fast role detection from JWT / user metadata
         const appMetadataRole = sessionUser?.app_metadata?.role;
         const userMetadataRole = sessionUser?.user_metadata?.role;
 
-        if (appMetadataRole) {
-          setRole(appMetadataRole);
+        if (appMetadataRole || userMetadataRole) {
+          setRole(appMetadataRole || userMetadataRole);
           setLoading(false);
-          // Create profile if missing
-          await supabase.rpc('ensure_profile_exists', { user_id: targetUserId });
+          await client.rpc('ensure_profile_exists', { user_id: targetUserId });
           return;
         }
 
-        if (userMetadataRole) {
-          setRole(userMetadataRole);
-          setLoading(false);
-          // Create profile if missing
-          await supabase.rpc('ensure_profile_exists', { user_id: targetUserId });
-          return;
-        }
-
-        // Fallback to profiles table
-        const { data, error } = await supabase
+        const { data, error } = await client
           .from('profiles')
           .select('role')
           .eq('id', targetUserId)
@@ -59,10 +50,11 @@ export function useRole(userId: string | null = null) {
         if (error) {
           console.error('Error fetching role from profiles:', error);
           try {
-            // Try to create profile if missing
-            await supabase.rpc('ensure_profile_exists', { user_id: targetUserId });
-            
-            const { data: roleData } = await supabase.rpc('get_all_auth_roles', { target_id: targetUserId });
+            await client.rpc('ensure_profile_exists', { user_id: targetUserId });
+
+            const { data: roleData } = await client.rpc('get_all_auth_roles', {
+              target_id: targetUserId,
+            });
 
             if (roleData) {
               if (
@@ -107,10 +99,10 @@ export function useRole(userId: string | null = null) {
   const refreshRole = async () => {
     setLoading(true);
     try {
-      await refreshSession(supabase); // Use throttled refresh
+      await refreshSession(client);
 
-      const { data: roleData } = await supabase.rpc('get_all_auth_roles', {
-        target_id: userId
+      const { data: roleData } = await client.rpc('get_all_auth_roles', {
+        target_id: userId,
       });
 
       if (roleData) {
@@ -131,7 +123,7 @@ export function useRole(userId: string | null = null) {
           setRole('user');
         }
       } else {
-        const { data } = await supabase
+        const { data } = await client
           .from('profiles')
           .select('role')
           .eq('id', userId)
