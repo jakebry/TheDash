@@ -20,7 +20,6 @@ export function CreateBusinessModal({ onClose }: CreateBusinessModalProps) {
   const { user } = useAuth();
   const { role, loading: roleLoading, refreshRole } = useRole(user?.id ?? null);
 
-  // Force a session refresh and then refresh the role
   useEffect(() => {
     const verifyBusinessAccess = async () => {
       setCheckingRole(true);
@@ -87,14 +86,25 @@ export function CreateBusinessModal({ onClose }: CreateBusinessModalProps) {
         .select()
         .single();
 
-      if (businessError) throw businessError;
+      if (businessError || !business) throw businessError;
+
+      const { data: ownerRole, error: roleError } = await supabase
+        .from('business_user_roles')
+        .select('id')
+        .eq('role', 'owner')
+        .single();
+
+      if (roleError || !ownerRole) {
+        toast.error('Failed to assign owner role to creator.');
+        return;
+      }
 
       const { error: memberError } = await supabase
         .from('business_members')
         .insert({
           business_id: business.id,
           user_id: user.id,
-          role: 'business'
+          role_id: ownerRole.id
         });
 
       if (memberError) throw memberError;
