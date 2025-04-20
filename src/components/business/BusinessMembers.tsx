@@ -64,80 +64,62 @@ export function BusinessMembers({
                   </td>
                 </tr>
               ) : (
-                members.map((member) => {
-                  console.log('[TEAM DEBUG]', {
-                    id: member.id,
-                    name: member.profile.full_name,
-                    user_id: member.user_id,
-                    currentUserId,
-                    business_role: member.business_role
-                  });
-
-                  const resolvedBusinessRole =
-                    member.business_role ??
-                    (member.user_id === currentUserId ? 'owner' : null);
-
-                  return (
-                    <tr key={member.id}>
-                      <td className="py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-neon-blue/20 flex items-center justify-center overflow-hidden">
-                            {member.profile.avatar_url ? (
-                              <img
-                                src={member.profile.avatar_url}
-                                alt={member.profile.full_name || member.profile.email || 'User Avatar'}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <span className="text-sm text-white">
-                                {member.profile.full_name?.[0] || member.profile.email[0].toUpperCase()}
-                              </span>
-                            )}
-                          </div>
-                          <div>
-                            <div className="font-medium text-white">{member.profile.full_name || 'Unnamed User'}</div>
-                            <div className="text-sm text-gray-400">{member.profile.email}</div>
-                          </div>
+                members.map((member) => (
+                  <tr key={member.id}>
+                    <td className="py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-neon-blue/20 flex items-center justify-center overflow-hidden">
+                          {member.profile.avatar_url ? (
+                            <img
+                              src={member.profile.avatar_url}
+                              alt={member.profile.full_name || member.profile.email}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-sm text-white">
+                              {member.profile.full_name?.[0] || member.profile.email[0].toUpperCase()}
+                            </span>
+                          )}
                         </div>
-                      </td>
+                        <div>
+                          <div className="font-medium text-white">{member.profile.full_name || 'Unnamed User'}</div>
+                          <div className="text-sm text-gray-400">{member.profile.email}</div>
+                        </div>
+                      </div>
+                    </td>
 
+                    <td className="py-4">
+                      <span className={`px-2 py-1 rounded-md text-xs font-medium text-white ${
+                        roleColors[member.role as keyof typeof roleColors] || 'bg-gray-500'
+                      }`}>
+                        {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
+                      </span>
+                    </td>
+
+                    <td className="py-4">
+                      <span className={`px-2 py-1 rounded-md text-xs font-medium text-white ${
+                        businessRoleColors[member.is_creator ? 'owner' : (member.business_role as BusinessRole) || 'employee'] || 'bg-gray-500'
+                      }`}>
+                        {member.is_creator ? 'Owner' : (member.business_role?.charAt(0).toUpperCase() + member.business_role?.slice(1)) || 'Employee'}
+                      </span>
+                    </td>
+
+                    <td className="py-4 text-gray-300">
+                      {new Date(member.joined_at).toLocaleDateString()}
+                    </td>
+
+                    {isOwner && member.user_id !== currentUserId && (
                       <td className="py-4">
-                        <span className={`px-2 py-1 rounded-md text-xs font-medium text-white ${
-                          roleColors[member.role as keyof typeof roleColors] || 'bg-gray-500'
-                        }`}>
-                          {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
-                        </span>
+                        <button
+                          className="text-red-400 hover:text-red-300 text-sm"
+                          onClick={() => onRemoveMember(member.id, member.profile.full_name || member.profile.email)}
+                        >
+                          Remove
+                        </button>
                       </td>
-
-                      <td className="py-4">
-                        {resolvedBusinessRole ? (
-                          <span className={`px-2 py-1 rounded-md text-xs font-medium text-white ${
-                            businessRoleColors[resolvedBusinessRole as BusinessRole] || 'bg-gray-500'
-                          }`}>
-                            {resolvedBusinessRole.charAt(0).toUpperCase() + resolvedBusinessRole.slice(1)}
-                          </span>
-                        ) : (
-                          <span className="italic text-gray-400">No role</span>
-                        )}
-                      </td>
-
-                      <td className="py-4 text-gray-300">
-                        {new Date(member.joined_at).toLocaleDateString()}
-                      </td>
-
-                      {isOwner && member.user_id !== currentUserId && (
-                        <td className="py-4">
-                          <button
-                            className="text-red-400 hover:text-red-300 text-sm"
-                            onClick={() => onRemoveMember(member.id, member.profile.full_name || member.profile.email)}
-                          >
-                            Remove
-                          </button>
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })
+                    )}
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
