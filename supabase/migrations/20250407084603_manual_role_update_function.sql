@@ -68,15 +68,6 @@ BEGIN
       raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || jsonb_build_object('role', new_role)
   WHERE id = target_user_id;
 
-  -- Optional: manually insert notification
-  INSERT INTO notifications (user_id, title, message, type)
-  VALUES (
-    target_user_id,
-    'Role Updated',
-    format('Your role was updated from %s to %s', previous_role, new_role),
-    'role_change'
-  );
-
   result := jsonb_build_object(
     'success', true,
     'message', format('Role updated from %s to %s', previous_role, new_role),
