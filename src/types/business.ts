@@ -35,3 +35,9 @@ export interface BusinessMember {
     avatar_url: string | null;
   };
 }
+
+export interface BusinessWithOwner extends Business {
+  owner: Owner;
+  members?: BusinessMember[];
+  memberCount: number;
+}

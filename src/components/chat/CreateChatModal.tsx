@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Search, Users, Check, Building2, User, ChevronRight } from 'lucide-react';
+import { X, Search, Users, Check, User, ChevronRight } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/useAuth';
 import toast from 'react-hot-toast';
@@ -97,14 +97,19 @@ export function CreateChatModal({ businesses, onClose, onChatCreated }: CreateCh
         .from('business_members')
         .select(`
           id, user_id,
-          profile:profiles(id, full_name, email, avatar_url)
-        `)
+          profile:profiles!inner(id, full_name, email, avatar_url)
+        `)        
         .eq('business_id', businessId)
         .neq('user_id', user?.id); // Exclude current user
         
       if (error) throw error;
       
-      setMembers(data as BusinessMember[] || []);
+      setMembers(
+        (data as any[]).map(member => ({
+          ...member,
+          profile: member.profile[0], // Ensure profile is an object, not an array
+        })) as BusinessMember[]
+      );
     } catch (error) {
       console.error('Error fetching business members:', error);
       toast.error('Failed to load business members');
@@ -123,8 +128,8 @@ export function CreateChatModal({ businesses, onClose, onChatCreated }: CreateCh
           .from('business_members')
           .select(`
             id, user_id,
-            profile:profiles(id, full_name, email, avatar_url)
-          `)
+            profile:profiles!inner(id, full_name, email, avatar_url)
+          `)          
           .eq('business_id', selectedBusiness?.id)
           .neq('user_id', user?.id)
           .textSearch('profile.email', likeQuery),
@@ -132,8 +137,8 @@ export function CreateChatModal({ businesses, onClose, onChatCreated }: CreateCh
           .from('business_members')
           .select(`
             id, user_id,
-            profile:profiles(id, full_name, email, avatar_url)
-          `)
+            profile:profiles!inner(id, full_name, email, avatar_url)
+          `)          
           .eq('business_id', selectedBusiness?.id)
           .neq('user_id', user?.id)
           .textSearch('profile.full_name', likeQuery)
@@ -142,10 +147,18 @@ export function CreateChatModal({ businesses, onClose, onChatCreated }: CreateCh
       // Combine and deduplicate results
       const combined = [...(emailMatches || []), ...(nameMatches || [])];
       const uniqueResults = Array.from(
-        new Map(combined.map(member => [member.id, member])).values()
+        new Map(
+          combined.map(member => [
+            member.id,
+            {
+              ...member,
+              profile: Array.isArray(member.profile) ? member.profile[0] : member.profile, // Ensure profile is an object
+            },
+          ])
+        ).values()
       );
 
-      setSearchResults(uniqueResults);
+      setSearchResults(uniqueResults as BusinessMember[]);
     } catch (error) {
       console.error('Error searching members:', error);
       toast.error('Failed to search members');
