@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Map, Building2, Plus, Edit, Calendar, DollarSign, Briefcase } from 'lucide-react';
+import { Map, Plus, Edit, Calendar, DollarSign, Briefcase } from 'lucide-react'; // Removed 'Building2'
 import Layout from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/useAuth';
@@ -128,29 +128,6 @@ export default function ProjectsPage() {
       toast.error('Failed to load projects');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const updateProjectImage = async (projectId: string, imageUrl: string) => {
-    try {
-      const { error } = await supabase
-        .from('projects')
-        .update({ image_url: imageUrl })
-        .eq('id', projectId);
-
-      if (error) throw error;
-      
-      // Update local state
-      setProjects(projects.map(project => 
-        project.id === projectId ? { ...project, image_url: imageUrl } : project
-      ));
-      
-      setEditingImageProject(null);
-      setNewImageUrl('');
-      toast.success('Project image updated');
-    } catch (error) {
-      console.error('Error updating project image:', error);
-      toast.error('Failed to update project image');
     }
   };
 

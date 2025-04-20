@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Map, Calendar, ArrowLeft, Edit, DollarSign, Clock, Building2, CheckSquare, FileText, User, MessageCircle as Message, ImageIcon, Camera } from 'lucide-react';
+import { Map, Calendar, ArrowLeft, Edit, DollarSign, Clock, Building2, CheckSquare, FileText, User, MessageCircle as Message, Camera } from 'lucide-react';
 import Layout from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/useAuth';

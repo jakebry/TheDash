@@ -48,7 +48,7 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const signUp = async (email: string, password: string, options: SignUpOptions) => {
-    const { full_name, role } = options;
+    const { full_name } = options;
 
     // First check if user exists
     const { data: existingUser } = await supabase
