@@ -16,7 +16,10 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "composite": true
+
+    /* Required for project references */
+    "composite": true,
+    "noEmit": false
   },
   "include": ["vite.config.ts"]
 }
