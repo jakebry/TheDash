@@ -50,7 +50,7 @@ BEGIN
   -- Only update profile if different (avoids trigger conflict)
   IF current_role::text != new_role THEN
     UPDATE profiles
-    SET role = new_role::user_role
+    SET role = new_role::user_role::user_role
     WHERE id = target_user_id;
   END IF;
 

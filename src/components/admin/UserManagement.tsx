@@ -189,7 +189,7 @@ export function UserManagement() {
       // 2. Update using specialized role update function
       // Pass newRole as a string to avoid the ambiguity issue
       const { data: updateResult, error: updateError } = await supabase
-        .rpc('update_user_role_with_validation', {
+        .rpc('update_user_role_safely', {
           target_user_id: userId,
           new_role: newRole
         });

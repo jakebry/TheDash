@@ -47,7 +47,7 @@ BEGIN
 
   IF current_role IS DISTINCT FROM new_role THEN
     UPDATE profiles
-    SET role = new_role::user_role
+    SET role = new_role::user_role::user_role
     WHERE id = target_user_id;
   END IF;
 

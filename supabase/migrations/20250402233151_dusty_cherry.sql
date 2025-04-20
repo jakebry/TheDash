@@ -90,7 +90,7 @@ DECLARE
 BEGIN
   -- Update profile role
   UPDATE profiles
-  SET role = new_role
+  SET role = new_role::user_role
   WHERE id = target_user_id;
 
   -- Update auth metadata

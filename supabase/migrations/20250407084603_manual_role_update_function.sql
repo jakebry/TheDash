@@ -48,7 +48,7 @@ BEGIN
   FROM profiles
   WHERE id = target_user_id;
 
-  IF previous_role = new_role THEN
+  IF previous_role = new_role::user_role THEN
     RETURN jsonb_build_object(
       'success', true,
       'message', 'User already has the requested role',
@@ -59,7 +59,7 @@ BEGIN
 
   -- Perform manual update (instead of trigger)
   UPDATE profiles
-  SET role = new_role::user_role
+  SET role = new_role::user_role::user_role
   WHERE id = target_user_id;
 
   -- Manually sync metadata in auth.users
