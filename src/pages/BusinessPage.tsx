@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/useAuth';
 import { BusinessInviteModal } from '../components/business/BusinessInviteModal';
 import toast from 'react-hot-toast';
-import { Business, BusinessMember } from '../types/business';
+import { Business, BusinessMember, BusinessRole } from '../types/business';
 import { BusinessSelector } from '../components/business/BusinessSelector';
 import { BusinessOverview } from '../components/business/BusinessOverview';
 import { BusinessSettings } from '../components/business/BusinessSettings';
@@ -108,7 +108,7 @@ export default function BusinessPage() {
           user_id,
           role,
           joined_at,
-          profile:profiles!inner(id, full_name, email, avatar_url)
+          profile:profiles(id, full_name, email, avatar_url)
         `)
         .eq('business_id', businessId);
         
@@ -143,10 +143,11 @@ export default function BusinessPage() {
         // Get business role from map or default to 'employee'
         const businessRole = businessRoleMap.get(member.user_id) || 'employee';
         const isCreator = businessData?.created_by === member.user_id;
-        
+
         return {
           ...member,
-          business_role: businessRole,
+          profile: Array.isArray(member.profile) ? member.profile[0] : member.profile, // Ensure profile is a single object
+          business_role: businessRole as BusinessRole, // Ensure proper typing
           is_creator: isCreator
         };
       }) : [];

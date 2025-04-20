@@ -100,7 +100,7 @@ export function BusinessMembers({
                       <span className={`px-2 py-1 rounded-md text-xs font-medium text-white ${
                         businessRoleColors[member.is_creator ? 'owner' : (member.business_role as BusinessRole) || 'employee'] || 'bg-gray-500'
                       }`}>
-                        {member.is_creator ? 'Owner' : (member.business_role?.charAt(0).toUpperCase() + member.business_role?.slice(1)) || 'Employee'}
+                        {member.is_creator ? 'Owner' : (member.business_role ? member.business_role.charAt(0).toUpperCase() + member.business_role.slice(1) : 'Employee')}
                       </span>
                     </td>
 
