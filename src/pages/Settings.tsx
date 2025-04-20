@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/useAuth';
 import { supabase } from '../lib/supabase';
-import toast from 'react-hot-toast';
 import Layout from '../components/Layout';
 import { ProfilePhoto } from '../components/settings/ProfilePhoto';
 import { PersonalInfo } from '../components/settings/PersonalInfo';
@@ -13,7 +12,9 @@ export default function Settings() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
+
+  const role = user?.user_metadata?.role || 'user';
 
   useEffect(() => {
     async function getProfile() {
@@ -26,14 +27,12 @@ export default function Settings() {
         // Start with user metadata (this doesn't require an API call)
         if (user.user_metadata?.full_name) {
           setFullName(user.user_metadata.full_name);
-          setIsLoading(false);
         }
         
         if (user.user_metadata?.avatar_url) {
           setAvatarUrl(user.user_metadata.avatar_url);
-          setIsLoading(false);
         }
-        
+
         // Single efficient query to get profile data
         const { data, error } = await supabase
           .from('profiles')
@@ -64,8 +63,9 @@ export default function Settings() {
   return (
     <Layout>
       <div className="max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold text-white mb-8">Profile Settings</h1>
-        
+        <h1 className="text-2xl font-bold text-white mb-4">Profile Settings</h1>
+        <p className="text-white mb-8">Your role: <span className="font-semibold">{role}</span></p>
+
         {error && (
           <div className="bg-red-500/20 border border-red-500/30 rounded-xl p-4 mb-6">
             <p className="text-white">{error}</p>
@@ -92,11 +92,12 @@ export default function Settings() {
             />
 
             <Security />
-            
-            {/* Admin promotion button remains but is hidden to regular users by its internal logic */}
-            <div className="hidden">
-              <PromoteToAdminButton />
-            </div>
+
+            {role === 'admin' && (
+              <div className="mt-6">
+                <PromoteToAdminButton />
+              </div>
+            )}
           </>
         )}
       </div>

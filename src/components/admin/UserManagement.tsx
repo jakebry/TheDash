@@ -1,25 +1,250 @@
 import { useState } from 'react';
 import { Search, RefreshCw, UserCheck } from 'lucide-react';
-import { useUserManagement } from '../../hooks/useUserManagement';
+import { supabase } from '../../lib/supabase';
+import toast from 'react-hot-toast';
+import { refreshSession } from '../../lib/tokenRefresh';
 import { UserList } from './UserList';
 import { StatusMessages } from './StatusMessages';
 
 export function UserManagement() {
+  const [users, setUsers] = useState<any[]>([]);
+  const [businesses, setBusinesses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const {
-    users,
-    businesses,
-    loading,
-    refreshing,
-    verifying,
-    error,
-    debugInfo,
-    updatingRoles,
-    handleRefresh,
-    updateUserRole,
-    assignUserToBusiness,
-    verifyAdminAccess,
-  } = useUserManagement();
+  const [error, setError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
+  const [updatingRoles, setUpdatingRoles] = useState<Record<string, boolean>>({});
+  // const { user: currentUser } = useAuth();
+
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      setDebugInfo(null);
+      let success = false;
+
+      try {
+        const { data: adminListData, error: adminListError } = await supabase.rpc('admin_list_all_profiles');
+        if (!adminListError && adminListData && adminListData.length > 0) {
+          const usersWithBusinesses = await addBusinessesToUsers(adminListData);
+          setUsers(usersWithBusinesses);
+          success = true;
+          console.log(`Successfully loaded ${usersWithBusinesses.length} users via admin_list_all_profiles`);
+          return;
+        }
+      } catch (adminListErr) {
+        console.warn('admin_list_all_profiles failed:', adminListErr);
+      }
+
+      if (!success) {
+        try {
+          const { data: usersData, error: usersError } = await supabase.rpc('list_users_with_businesses');
+          if (!usersError && usersData) {
+            const formattedUsers = usersData.map((user: any) => ({
+              id: user.user_id,
+              email: user.email,
+              full_name: user.full_name,
+              role: user.role as 'admin' | 'business' | 'user',
+              created_at: user.created_at,
+              businesses: user.businesses ? JSON.parse(JSON.stringify(user.businesses)) : []
+            }));
+            setUsers(formattedUsers);
+            success = true;
+            console.log(`Successfully loaded ${formattedUsers.length} users via list_users_with_businesses`);
+            return;
+          }
+        } catch (rpcError) {
+          console.warn('list_users_with_businesses failed:', rpcError);
+        }
+      }
+
+      if (!success) {
+        try {
+          const { data: profilesData, error: profilesError } = await supabase
+            .from('profiles')
+            .select('id, role, full_name, email, created_at')
+            .order('created_at', { ascending: false });
+
+          if (!profilesError && profilesData) {
+            const usersWithBusinesses = await addBusinessesToUsers(profilesData);
+            setUsers(usersWithBusinesses);
+            setDebugInfo("Retrieved users directly from profiles table. You may need to verify admin access for complete data.");
+            success = true;
+            return;
+          }
+        } catch (profilesErr) {
+          console.warn('Direct profiles query failed:', profilesErr);
+        }
+      }
+
+      if (!success) {
+        setError('Failed to load user data. Please verify admin access and try again.');
+      }
+    } catch (error: any) {
+      console.error('Error fetching users:', error);
+      toast.error('Failed to load users');
+      setError(`Failed to load user data: ${error.message || 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  async function addBusinessesToUsers(users: any[]): Promise<any[]> {
+    try {
+      const { data: memberships, error: membershipError } = await supabase
+        .from('business_members')
+        .select('user_id, business_id');
+
+      if (membershipError) throw membershipError;
+
+      const { data: allBusinesses, error: businessError } = await supabase
+        .from('businesses')
+        .select('id, name');
+
+      if (businessError) throw businessError;
+
+      return users.map(user => {
+        const userBusinessIds = memberships?.filter(m => m.user_id === user.id).map(m => m.business_id) || [];
+        const userBusinesses = allBusinesses?.filter(b => userBusinessIds.includes(b.id)).map(b => ({
+          id: b.id,
+          name: b.name
+        })) || [];
+        return { ...user, businesses: userBusinesses };
+      });
+    } catch (error) {
+      console.warn('Error adding businesses to users:', error);
+      return users.map(user => ({ ...user, businesses: [] }));
+    }
+  }
+
+  const fetchBusinesses = async () => {
+    try {
+      const { data, error } = await supabase.from('businesses').select('id, name');
+      if (error) throw error;
+      setBusinesses(data || []);
+    } catch (error) {
+      console.error('Error fetching businesses:', error);
+      toast.error('Failed to load businesses');
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchUsers();
+    await fetchBusinesses();
+  };
+
+  async function updateUserRole(userId: string, newRole: 'admin' | 'business' | 'user') {
+    try {
+      setUpdatingRoles({ ...updatingRoles, [userId]: true });
+
+      const { error: userError } = await supabase
+        .from('profiles')
+        .select('role, email, full_name')
+        .eq('id', userId)
+        .single();
+
+      if (userError) throw userError;
+
+      // const previousRole = userData?.role || 'user';
+
+      const { data: updateResult, error: updateError } = await supabase.rpc('update_user_role_safely', {
+        target_user_id: userId,
+        new_role: newRole
+      });
+
+      if (updateError) throw updateError;
+      if (!updateResult?.success) throw new Error(updateResult?.error || 'Role update failed');
+
+      await refreshSession(supabase);
+      await new Promise(resolve => setTimeout(resolve, 250));
+      await supabase.auth.getUser(); // Optional: pull updated JWT info
+
+      setUsers(users.map(user => user.id === userId ? { ...user, role: newRole } : user));
+
+      toast.success('User role updated successfully');
+
+      if (newRole === 'business') {
+        toast.success('Business role activated! Click the notification to create your first business.');
+      }
+    } catch (error: any) {
+      console.error('Error updating user role:', error);
+      toast.error('Failed to update user role');
+    } finally {
+      setUpdatingRoles({ ...updatingRoles, [userId]: false });
+    }
+  }
+
+  async function assignUserToBusiness(userId: string, businessId: string) {
+    try {
+      const { data: existing } = await supabase
+        .from('business_members')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('business_id', businessId)
+        .single();
+
+      if (existing) {
+        toast.error('User is already a member of this business');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('business_members')
+        .insert({ user_id: userId, business_id: businessId });
+
+      if (error) throw error;
+      await fetchUsers();
+      toast.success('User assigned to business successfully');
+    } catch (error) {
+      toast.error('Failed to assign user to business');
+    }
+  }
+
+  const verifyAdminAccess = async () => {
+    try {
+      setVerifying(true);
+      setDebugInfo('Verifying admin access...');
+      await refreshSession(supabase);
+      setDebugInfo('Step 1: Refreshed auth token');
+      await supabase.rpc('ensure_profile_exists', { check_all: true });
+      setDebugInfo('Step 2: Ensured all profiles exist');
+      const { data: repairData } = await supabase.rpc('repair_admin_visibility');
+      setDebugInfo(`Step 3: ${repairData || 'Repaired admin visibility'}`);
+      const { data: fixAppData } = await supabase.rpc('fix_admin_app_metadata');
+      setDebugInfo(`Step 4: ${fixAppData || 'Updated app metadata'}`);
+      await refreshSession(supabase);
+      const { data: profileFixData } = await supabase.rpc('fix_admin_profile_access');
+      setDebugInfo(`Step 6: ${profileFixData || 'Fixed admin profile access'}`);
+      const { data: diagData } = await supabase.rpc('get_admin_diagnostic_info');
+      await fetchUsers();
+      await fetchBusinesses();
+
+      const isAdminInJwt = diagData?.roles?.is_admin_in_jwt === true;
+      const isAdminInProfile = diagData?.roles?.is_admin_in_profile === true;
+
+      setDebugInfo(`Admin access verification complete. JWT admin: ${isAdminInJwt || false}, 
+        Profile admin: ${isAdminInProfile || false}.
+        You may need to log out and log back in for all changes to take effect.`);
+
+      toast.success('Admin access verification completed');
+
+      if (!isAdminInJwt && isAdminInProfile) {
+        toast.error('Your JWT token does not have admin role. Please log out and log back in.', {
+          duration: 5000
+        });
+      }
+    } catch (error) {
+      console.error('Error verifying admin access:', error);
+      toast.error('Failed to verify admin access');
+      setDebugInfo('Failed to verify admin access. Try logging out and logging back in.');
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   const filteredUsers = users.filter(user =>
     user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||

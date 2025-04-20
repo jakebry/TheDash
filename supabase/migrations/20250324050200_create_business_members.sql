@@ -7,8 +7,8 @@
 */
 
 CREATE TABLE IF NOT EXISTS public.business_members (
-  id SERIAL PRIMARY KEY,
-  business_id INTEGER NOT NULL REFERENCES public.businesses(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_id UUID NOT NULL REFERENCES public.businesses(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   role TEXT DEFAULT 'member',
   invited_by UUID REFERENCES public.profiles(id),

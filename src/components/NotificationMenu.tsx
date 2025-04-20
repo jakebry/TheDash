@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/useAuth';
 import { CreateBusinessModal } from './modals/CreateBusinessModal';
 import { BusinessJoinModal } from './business/BusinessJoinModal';
 import toast from 'react-hot-toast';
+import { refreshSession } from '../lib/tokenRefresh';
 
 interface Notification {
   id: string;
@@ -21,12 +22,14 @@ interface Notification {
 export function NotificationMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showBusinessModal, setShowBusinessModal] = useState(false);
   const [showJoinBusinessModal, setShowJoinBusinessModal] = useState(false);
   const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isMarkingRead, setIsMarkingRead] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
 
@@ -37,93 +40,183 @@ export function NotificationMenu() {
     const fetchNotifications = async () => {
       try {
         setIsLoading(true);
+        setError(null);
+
+        // Ensure we have a valid session before proceeding
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) {
+          console.error('Session error:', sessionError);
+          setError('Authentication error. Please try refreshing the page.');
+          setIsLoading(false);
+          return;
+        }
+        
+        if (!sessionData.session) {
+          console.warn('No active session');
+          setError('No active session. Please log in again.');
+          setIsLoading(false);
+          return;
+        }
+
         // Ensure profile exists before fetching notifications
         if (user?.id) {
-          await supabase.rpc('ensure_profile_exists', { user_id: user.id });
+          try {
+            await supabase.rpc('ensure_profile_exists', { user_id: user.id });
+          } catch (profileError) {
+            console.warn('Profile check error:', profileError);
+            // Continue anyway, as this is non-critical
+          }
         }
-        const { data, error } = await supabase
-          .from('notifications')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(50);
-        if (error) {
-          console.error('Error fetching notifications:', error);
-          throw error;
+
+        // Fetch notifications with proper error handling
+        try {
+          const { data, error } = await supabase
+            .from('notifications')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(50);
+
+          if (error) {
+            throw error;
+          }
+
+          setNotifications(data || []);
+        } catch (fetchError: any) {
+          console.error('Error fetching notifications:', fetchError);
+          setError(`Failed to load notifications: ${fetchError.message || 'Unknown error'}`);
+          setNotifications([]);
+          
+          // If we haven't retried too many times, try again
+          if (retryCount < 3) {
+            setRetryCount(retryCount + 1);
+            setTimeout(() => fetchNotifications(), 2000); // Retry after 2 seconds
+          }
         }
-        setNotifications(data || []);
-      } catch (error) {
-        console.error('Error fetching notifications:', error);
-        toast.error('Failed to load notifications');
+      } catch (error: any) {
+        const errorMessage = error instanceof Error ? error.message : 'Failed to load notifications';
+        console.error('General error in notifications:', errorMessage);
+        
+        // Only show toast for non-session errors
+        if (errorMessage !== 'No active session') {
+          toast.error(errorMessage);
+        }
+        
+        setNotifications([]);
       } finally {
         setIsLoading(false);
       }
     };
 
+    // Initial fetch
     fetchNotifications();
 
-    // Subscribe to new notifications
-    const subscription = supabase
-      .channel('notifications')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'notifications',
-        filter: `user_id=eq.${user.id}`
-      }, (payload) => {
-        setNotifications(prev => [payload.new as Notification, ...prev]);
-        toast.success('New notification received!', {
-          icon: '🔔',
-        });
+    // Subscribe to new notifications with better error handling
+    const setupSubscription = async () => {
+      try {
+        // Refresh session before subscribing (using throttled refreshSession)
+        await refreshSession(supabase);
         
-        // Handle role-specific notifications
-        if (payload.new.type === 'role_change') {
-          // Role change notifications might require additional UI feedback
-          const newRole = payload.new.metadata?.new_role;
-          if (newRole) {
-            toast.success(`Your role has been updated to ${newRole}`, {
-              duration: 5000,
-              icon: '👑'
+        // Define callback functions before subscription
+        const handleInsert = (payload: any) => {
+          if (!payload?.new?.user_id) return;
+          
+          // Filter notifications client-side to avoid subscription issues
+          if (payload.new.user_id === user?.id) {
+            setNotifications(prev => [payload.new as Notification, ...prev]);
+            toast.success('New notification received!', {
+              icon: '🔔',
             });
             
-            // If role changed from something else to admin, suggest page refresh
-            if (newRole === 'admin') {
-              toast.success('Please refresh the page to apply new admin permissions', {
-                duration: 8000,
-                icon: '⚠️'
-              });
+            // Handle role-specific notifications
+            if (payload.new.type === 'role_change') {
+              const newRole = payload.new.metadata?.new_role;
+              if (newRole) {
+                toast.success(`Your role has been updated to ${newRole}`, {
+                  duration: 5000,
+                  icon: '👑'
+                });
+                
+                if (newRole === 'admin') {
+                  toast.success('Please refresh the page to apply new admin permissions', {
+                    duration: 8000,
+                    icon: '⚠️'
+                  });
+                }
+              }
             }
           }
+        };
+        
+        const handleUpdate = (payload: any) => {
+          if (!payload?.new?.user_id) return;
+          
+          if (payload.new.user_id === user?.id) {
+            setNotifications(prev =>
+              prev.map(n => n.id === payload.new.id ? payload.new as Notification : n)
+            );
+          }
+        };
+        
+        const handleDelete = (payload: any) => {
+          if (!payload?.old?.user_id) return;
+          
+          if (payload.old.user_id === user?.id) {
+            setNotifications(prev => 
+              prev.filter(n => n.id !== payload.old.id)
+            );
+          }
+        };
+        
+        // Ensure we have a valid user ID
+        if (!user?.id) {
+          console.warn('No user ID available for notification subscription');
+          return;
         }
-      })
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'notifications',
-        filter: `user_id=eq.${user.id}`
-      }, (payload) => {
-        setNotifications(prev =>
-          prev.map(n => n.id === payload.new.id ? payload.new as Notification : n)
-        );
-      })
-      .on('postgres_changes', {
-        event: 'DELETE',
-        schema: 'public',
-        table: 'notifications',
-        filter: `user_id=eq.${user.id}`
-      }, (payload) => {
-        setNotifications(prev => 
-          prev.filter(n => n.id !== payload.old.id)
-        );
-      })
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('Successfully subscribed to notifications');
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('Failed to subscribe to notifications');
-          toast.error('Failed to subscribe to notifications');
-        }
-      });
+        
+        const subscription = supabase
+          .channel('notifications')
+          .on('postgres_changes', {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications'
+          }, handleInsert)
+          .on('postgres_changes', {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'notifications'
+          }, handleUpdate)
+          .on('postgres_changes', {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'notifications'
+          }, handleDelete)
+          .subscribe((status, err) => {
+            if (status === 'SUBSCRIBED') {
+              console.log('Successfully subscribed to notifications');
+            } else if (status === 'CHANNEL_ERROR') {
+              console.error('Failed to subscribe to notifications:', err);
+              toast.error('Failed to subscribe to notifications');
+            } else if (status === 'TIMED_OUT') {
+              console.warn('Subscription timed out, retrying...');
+              // Implement retry after timeout
+              setTimeout(() => {
+                subscription.subscribe();
+              }, 2000);
+            }
+          });
+          
+        return subscription;
+      } catch (error) {
+        console.error('Error setting up subscription:', error);
+        toast.error('Failed to set up notifications');
+        return;
+      }
+    };
+    
+    // Set up subscription
+    const subscriptionPromise = setupSubscription();
+    
     // Refresh notifications every 30 seconds as backup
     const refreshInterval = setInterval(fetchNotifications, 30000);
 
@@ -136,11 +229,14 @@ export function NotificationMenu() {
     document.addEventListener('mousedown', handleClickOutside);
 
     return () => {
-      subscription.unsubscribe();
+      // Clean up subscription
+      subscriptionPromise.then(subscription => {
+        subscription?.unsubscribe();
+      });
       clearInterval(refreshInterval);
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [user]);
+  }, [user, retryCount]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -264,8 +360,9 @@ export function NotificationMenu() {
     if ((notification.type === 'business_role' && notification.metadata?.action === 'create_business') ||
         (notification.type === 'role_change' && notification.metadata?.new_role === 'business')) {
       
-      // First refresh the session and JWT
-      await supabase.auth.refreshSession();
+      // Use throttled session refresh
+      await refreshSession(supabase);
+      
       const { data: roleData } = await supabase.rpc('get_all_auth_roles');
       
       if (roleData?.profile_role === 'business' || roleData?.jwt_role === 'business') {
@@ -280,7 +377,7 @@ export function NotificationMenu() {
           
           if (activationResult) {
             // Refresh session one more time after activation
-            await supabase.auth.refreshSession();
+            await refreshSession(supabase);
             setShowBusinessModal(true);
           } else {
             toast.error('Could not activate business role. Please try logging out and back in.');
@@ -349,6 +446,11 @@ export function NotificationMenu() {
         <div className="absolute right-0 mt-2 w-80 bg-highlight-blue rounded-xl shadow-lg overflow-hidden z-50">
           <div className="p-4 border-b border-light-blue flex justify-between items-center">
             <h3 className="text-lg font-semibold text-white">Notifications</h3>
+            {error && (
+              <div className="text-sm text-red-400">
+                {error}
+              </div>
+            )}
             {notifications.length > 0 && (
               <button
                 onClick={clearAllNotifications}

@@ -1,0 +1,259 @@
+/* Business component styles */
+
+/* Common */
+.section-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: white;
+  margin-bottom: 1rem;
+}
+
+/* Business Selector */
+.business-selector {
+  margin-bottom: 1.5rem;
+}
+
+.business-selector label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #9ca3af;
+  margin-bottom: 0.5rem;
+}
+
+.business-selector select {
+  width: 100%;
+  padding: 0.5rem 1rem;
+  background-color: var(--light-blue);
+  border: 1px solid #4b5563;
+  border-radius: 0.5rem;
+  color: white;
+  transition: all 0.3s ease;
+}
+
+.business-selector select:focus {
+  outline: none;
+  border-color: var(--neon-blue);
+}
+
+/* Business Overview */
+.business-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+}
+
+.business-header-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.business-logo {
+  width: 4rem;
+  height: 4rem;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.business-info h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: white;
+}
+
+.business-info p {
+  color: #d1d5db;
+  margin-top: 0.25rem;
+}
+
+/* Business Cards */
+.contact-info-card {
+  background-color: var(--highlight-blue);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.contact-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.contact-item p:first-child {
+  color: #9ca3af;
+  font-size: 0.875rem;
+}
+
+.contact-item p:last-child {
+  color: white;
+}
+
+.contact-item a {
+  color: var(--neon-blue);
+  transition: all 0.2s ease;
+}
+
+.contact-item a:hover {
+  text-decoration: underline;
+}
+
+/* Activity */
+.activity-list {
+  margin-top: 1rem;
+}
+
+.activity-item {
+  display: flex;
+  align-items: start;
+  gap: 0.75rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #374151;
+  margin-bottom: 1rem;
+}
+
+.activity-icon {
+  padding: 0.5rem;
+  background-color: var(--light-blue);
+  border-radius: 0.5rem;
+}
+
+.activity-content {
+  flex: 1;
+}
+
+.activity-title {
+  font-weight: 500;
+  color: white;
+}
+
+.activity-description {
+  font-size: 0.875rem;
+  color: #9ca3af;
+}
+
+.activity-time {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+/* Business Members */
+.team-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.member-table {
+  width: 100%;
+}
+
+.member-table th {
+  text-align: left;
+  padding-bottom: 0.75rem;
+  color: #9ca3af;
+  font-weight: 500;
+  border-bottom: 1px solid #374151;
+}
+
+.member-table td {
+  padding: 1rem 0;
+}
+
+.member-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.member-avatar {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  background-color: rgba(59, 130, 246, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.member-name {
+  font-weight: 500;
+  color: white;
+}
+
+.member-email {
+  font-size: 0.875rem;
+  color: #9ca3af;
+}
+
+/* Business Settings */
+.settings-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #d1d5db;
+  margin-bottom: 0.5rem;
+}
+
+.form-group input,
+.form-group textarea,
+.form-group select {
+  width: 100%;
+  padding: 0.5rem 1rem;
+  background-color: var(--light-blue);
+  border: 1px solid #4b5563;
+  border-radius: 0.5rem;
+  color: white;
+  transition: all 0.3s ease;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: var(--neon-blue);
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+}
+
+.form-button {
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.primary-button {
+  background-color: var(--neon-blue);
+  color: white;
+}
+
+.primary-button:hover {
+  background-color: #0069d9;
+}
+
+.primary-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

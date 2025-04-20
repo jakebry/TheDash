@@ -1,0 +1,80 @@
+CREATE OR REPLACE FUNCTION public.update_user_role_with_validation(
+  target_user_id uuid,
+  new_role text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $function$
+DECLARE
+  result jsonb;
+  current_user_role user_role;
+  target_user_name TEXT;
+  target_user_email TEXT;
+  valid_role BOOLEAN;
+  current_role user_role;
+BEGIN
+  -- Check if the current user is an admin
+  SELECT role INTO current_user_role
+  FROM profiles
+  WHERE id = auth.uid();
+
+  IF current_user_role != 'admin'::user_role THEN
+    RETURN jsonb_build_object(
+      'success', false,
+      'error', 'Only administrators can change user roles',
+      'status', 403
+    );
+  END IF;
+
+  -- Validate the role
+  SELECT EXISTS (
+    SELECT 1 FROM pg_enum
+    WHERE enumlabel = new_role
+      AND enumtypid = 'user_role'::regtype::oid
+  ) INTO valid_role;
+
+  IF NOT valid_role THEN
+    RETURN jsonb_build_object(
+      'success', false,
+      'error', format('Invalid role: %s', new_role),
+      'status', 400
+    );
+  END IF;
+
+  -- Get current role and user info
+  SELECT full_name, email, role INTO target_user_name, target_user_email, current_role
+  FROM profiles
+  WHERE id = target_user_id;
+
+  -- Only update profile if different (avoids trigger conflict)
+  IF current_role::text != new_role THEN
+    UPDATE profiles
+    SET role = new_role::user_role::user_role
+    WHERE id = target_user_id;
+  END IF;
+
+  -- Update auth metadata regardless
+  UPDATE auth.users
+  SET raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('role', new_role),
+      raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || jsonb_build_object('role', new_role)
+  WHERE id = target_user_id;
+
+  result := jsonb_build_object(
+    'success', true,
+    'message', format('Role updated to %s for %s', new_role, coalesce(target_user_name, target_user_email, 'user')),
+    'user_id', target_user_id,
+    'new_role', new_role
+  );
+
+  RETURN result;
+
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN jsonb_build_object(
+      'success', false,
+      'error', SQLERRM,
+      'status', 500
+    );
+END;
+$function$;

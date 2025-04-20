@@ -1,0 +1,131 @@
+/* Business page styles */
+
+.business-card {
+  background-color: var(--highlight-blue);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+}
+
+.business-card:hover {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Tab navigation */
+.tabs-nav {
+  display: flex;
+  gap: 1rem;
+  border-bottom: 1px solid #374151;
+  margin-bottom: 1.5rem;
+}
+
+.tab-button {
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.tab-button:hover {
+  color: #f3f4f6;
+}
+
+.tab-button.active {
+  color: white;
+  border-bottom: 2px solid var(--neon-blue);
+}
+
+/* Business card variations */
+.business-card-highlight {
+  background: linear-gradient(135deg, rgba(35, 53, 84, 0.8) 0%, rgba(23, 35, 55, 0.9) 100%);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.business-overview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+}
+
+/* Business stats */
+.business-stats-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+/* Member list animations */
+.member-row {
+  transition: background-color 0.2s ease;
+}
+
+.member-row:hover {
+  background-color: rgba(17, 34, 64, 0.7);
+}
+
+/* Tag/badge styles */
+.status-tag {
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.owner-tag {
+  background-color: #f59e0b;
+}
+
+.supervisor-tag {
+  background-color: #10b981;
+}
+
+.lead-tag {
+  background-color: #0ea5e9;
+}
+
+.employee-tag {
+  background-color: #3b82f6;
+}
+
+/* Loading state */
+.loading-spinner {
+  border-radius: 50%;
+  width: 2rem;
+  height: 2rem;
+  border: 2px solid rgba(59, 130, 246, 0.3);
+  border-top-color: #3b82f6;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 2rem;
+  color: #9ca3af;
+}
+
+.empty-state-icon {
+  margin: 0 auto 1rem auto;
+  width: 3rem;
+  height: 3rem;
+  opacity: 0.5;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .business-overview-header {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .business-stats-container {
+    grid-template-columns: 1fr;
+  }
+}

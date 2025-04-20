@@ -1,6 +1,7 @@
 import { createContext, useEffect, useState } from "react";
 import { User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
+import { refreshSession } from "../lib/tokenRefresh";
 import toast from 'react-hot-toast';
 
 interface SignUpOptions {
@@ -47,7 +48,7 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const signUp = async (email: string, password: string, options: SignUpOptions) => {
-    const { full_name, role } = options;
+    const { full_name } = options;
 
     // First check if user exists
     const { data: existingUser } = await supabase
@@ -80,7 +81,8 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // Wait for trigger to create profile and validate role
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Validate and repair user role
+      // Validate and repair user role - use throttled refresh
+      await refreshSession(supabase);
       await supabase.rpc('validate_user_role', { user_id: newUser.id });
 
       // Now sign in with the new credentials

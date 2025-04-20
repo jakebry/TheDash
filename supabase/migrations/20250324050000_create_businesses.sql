@@ -6,10 +6,10 @@
 */
 
 CREATE TABLE IF NOT EXISTS public.businesses (
-  id SERIAL PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
-  created_by uuid, -- The user who created the business
-  created_at timestamptz DEFAULT now()
+  created_by UUID, -- The user who created the business
+  created_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- Optional: Create an index on the created_by column for performance

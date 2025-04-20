@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Building2, RefreshCw } from 'lucide-react';
+import { Building2, RefreshCw, Trash2, AlertCircle, Users } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
+import { DeleteBusinessModal } from './DeleteBusinessModal';
+import { BusinessInviteModal } from '../business/BusinessInviteModal';
 
 interface Business {
   id: string;
@@ -23,18 +25,20 @@ interface Owner {
 
 interface BusinessWithOwner extends Business {
   owner: Owner | null;
+  memberCount?: number; // ✅ PATCH: add memberCount
 }
 
 export function BusinessManagement() {
   const [businesses, setBusinesses] = useState<BusinessWithOwner[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [businessToDelete, setBusinessToDelete] = useState<BusinessWithOwner | null>(null);
+  const [businessToInvite, setBusinessToInvite] = useState<BusinessWithOwner | null>(null);
 
   const fetchBusinesses = async () => {
     try {
       setLoading(true);
-      
-      // Fetch businesses with their owners
+
       const { data: businessData, error: businessError } = await supabase
         .from('businesses')
         .select(`
@@ -49,8 +53,24 @@ export function BusinessManagement() {
         .order('created_at', { ascending: false });
 
       if (businessError) throw businessError;
-      
-      setBusinesses(businessData as BusinessWithOwner[] || []);
+
+      const businessesWithMembers = await Promise.all((businessData || []).map(async (business) => {
+        const { count, error: countError } = await supabase
+          .from('business_members')
+          .select('*', { count: 'exact', head: true })
+          .eq('business_id', business.id);
+
+        if (countError) {
+          console.error('Error getting member count:', countError);
+        }
+
+        return {
+          ...business,
+          memberCount: count || 0
+        };
+      }));
+
+      setBusinesses(businessesWithMembers);
     } catch (error) {
       console.error('Error fetching businesses:', error);
       toast.error('Failed to load businesses');
@@ -69,11 +89,41 @@ export function BusinessManagement() {
     await fetchBusinesses();
   };
 
+  const handleDeleteBusiness = (business: BusinessWithOwner) => {
+    setBusinessToDelete(business);
+  };
+
+  const handleInviteToBusinessClick = (business: BusinessWithOwner) => {
+    setBusinessToInvite(business);
+  };
+
+  const onBusinessDeleted = () => {
+    setBusinessToDelete(null);
+    fetchBusinesses();
+  };
+
+  const BusinessRiskIndicator = ({ memberCount = 0 }: { memberCount?: number }) => {
+    if (memberCount === 0) return null;
+
+    const riskClass = memberCount > 10
+      ? 'bg-red-500/20 border-red-500/30 text-red-400'
+      : memberCount > 5
+        ? 'bg-yellow-500/20 border-yellow-500/30 text-yellow-400'
+        : 'bg-green-500/20 border-green-500/30 text-green-400';
+
+    return (
+      <div className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs ${riskClass}`}>
+        <AlertCircle className="w-3.5 h-3.5" />
+        <span>{memberCount} member{memberCount !== 1 ? 's' : ''}</span>
+      </div>
+    );
+  };
+
   return (
     <div className="bg-highlight-blue rounded-xl p-6 mt-8">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-semibold text-white">Business Management</h2>
-        <button 
+        <button
           onClick={handleRefresh}
           disabled={refreshing || loading}
           className="flex items-center gap-2 px-3 py-2 bg-light-blue hover:bg-highlight-blue rounded-lg transition-colors text-white text-sm disabled:opacity-50"
@@ -90,7 +140,8 @@ export function BusinessManagement() {
               <th className="pb-3 text-gray-400 font-medium">Business</th>
               <th className="pb-3 text-gray-400 font-medium">Owner</th>
               <th className="pb-3 text-gray-400 font-medium">Contact</th>
-              <th className="pb-3 text-gray-400 font-medium">Location</th>
+              <th className="pb-3 text-gray-400 font-medium">Members</th>
+              <th className="pb-3 text-gray-400 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-700">
@@ -100,12 +151,13 @@ export function BusinessManagement() {
                   <td className="py-4"><div className="h-6 bg-light-blue/50 rounded w-48 animate-pulse" /></td>
                   <td className="py-4"><div className="h-6 bg-light-blue/50 rounded w-40 animate-pulse" /></td>
                   <td className="py-4"><div className="h-6 bg-light-blue/50 rounded w-32 animate-pulse" /></td>
-                  <td className="py-4"><div className="h-6 bg-light-blue/50 rounded w-40 animate-pulse" /></td>
+                  <td className="py-4"><div className="h-6 bg-light-blue/50 rounded w-24 animate-pulse" /></td>
+                  <td className="py-4"><div className="h-6 bg-light-blue/50 rounded w-24 animate-pulse" /></td>
                 </tr>
               ))
             ) : businesses.length === 0 ? (
               <tr>
-                <td colSpan={4} className="py-8 text-center text-gray-400">
+                <td colSpan={5} className="py-8 text-center text-gray-400">
                   No businesses found
                 </td>
               </tr>
@@ -122,7 +174,7 @@ export function BusinessManagement() {
                         <p className="text-sm text-gray-400 mt-1">{business.description}</p>
                       )}
                       {business.website && (
-                        <a 
+                        <a
                           href={business.website}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -147,11 +199,30 @@ export function BusinessManagement() {
                     {business.phone_number && (
                       <div className="text-white">{business.phone_number}</div>
                     )}
+                    {business.address && (
+                      <div className="text-sm text-gray-400 mt-1">{business.address}</div>
+                    )}
                   </td>
                   <td className="py-4">
-                    {business.address && (
-                      <div className="text-white">{business.address}</div>
-                    )}
+                    <BusinessRiskIndicator memberCount={business.memberCount} />
+                  </td>
+                  <td className="py-4">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleInviteToBusinessClick(business)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 bg-neon-blue/20 hover:bg-neon-blue/30 text-neon-blue rounded-lg text-xs"
+                      >
+                        <Users className="w-3.5 h-3.5" />
+                        Invite
+                      </button>
+                      <button
+                        onClick={() => handleDeleteBusiness(business)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg text-xs"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -159,6 +230,23 @@ export function BusinessManagement() {
           </tbody>
         </table>
       </div>
+
+      {businessToDelete && (
+        <DeleteBusinessModal
+          businessId={businessToDelete.id}
+          businessName={businessToDelete.name}
+          onClose={() => setBusinessToDelete(null)}
+          onDeleted={onBusinessDeleted}
+        />
+      )}
+
+      {businessToInvite && (
+        <BusinessInviteModal
+          businessId={businessToInvite.id}
+          businessName={businessToInvite.name}
+          onClose={() => setBusinessToInvite(null)}
+        />
+      )}
     </div>
   );
 }

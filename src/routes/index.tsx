@@ -5,6 +5,9 @@ import Layout from '../components/Layout';
 import Settings from '../pages/Settings';
 import AdminSettings from '../pages/AdminSettings';
 import BusinessPage from '../pages/BusinessPage';
+import ProjectsPage from '../pages/ProjectsPage';
+import ProjectDetailPage from '../pages/ProjectDetailPage';
+import Chat from '../pages/Chat';
 
 export default function AppRoutes() {
   const { user, loading } = useAuth();
@@ -57,9 +60,7 @@ export default function AppRoutes() {
         path="/chat"
         element={
           user ? (
-            <Layout>
-              <div>Chat</div>
-            </Layout>
+            <Chat />
           ) : (
             <Navigate to="/login" replace />
           )
@@ -80,6 +81,36 @@ export default function AppRoutes() {
         element={
           user ? (
             <AdminSettings />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route
+        path="/projects"
+        element={
+          user ? (
+            <ProjectsPage />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route
+        path="/projects/:businessId"
+        element={
+          user ? (
+            <ProjectsPage />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route
+        path="/project/:projectId"
+        element={
+          user ? (
+            <ProjectDetailPage />
           ) : (
             <Navigate to="/login" replace />
           )
