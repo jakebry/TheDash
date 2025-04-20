@@ -30,7 +30,7 @@ interface ChatRoom {
   last_message?: string;
   last_message_time?: string;
   type: ChatType;
-  unread_count: number;
+  unread_count?: number; // Made optional to avoid errors if not present
   business_id: string;
   business_name: string;
   recipient_id?: string;
@@ -209,7 +209,7 @@ export default function Chat() {
       const groupChats = await Promise.all(
         businesses.map(async (business) => {
           // Get the latest message to show in the chat list
-          const { data: latestMessage, error: messageError } = await supabase
+          const { data: latestMessage } = await supabase
             .from('chat_messages')
             .select('message, created_at')
             .eq('business_id', business.id)
@@ -245,7 +245,7 @@ export default function Chat() {
       );
       
       // Initialize array for private chats
-      let privateChats: ChatRoom[] = [];
+      // Removed unused variable 'privateChats'
       
       // Instead of using the complex join, fetch chats separately and combine
       const { data: sentMessages, error: sentError } = await supabase
@@ -430,7 +430,12 @@ export default function Chat() {
         }));
       }
       
-      setMessages(messages || []);
+      setMessages(
+        (messages || []).map((message) => ({
+          ...message,
+          sender: message.sender || undefined, // Ensure sender is undefined if null
+        }))
+      );
     } catch (error) {
       console.error('Error fetching messages:', error);
       toast.error('Failed to load messages');
@@ -535,7 +540,7 @@ export default function Chat() {
       
       // Remove optimistic message on error
       setMessages(prev => prev.filter(msg => !msg.id.startsWith('temp-')));
-      setNewMessage(optimisticMessage.message); // Restore message to input
+      setNewMessage(''); // Clear the input field
     } finally {
       setSendingMessage(false);
     }
@@ -607,7 +612,7 @@ export default function Chat() {
                 <button
                   key={chat.id}
                   onClick={() => {
-                    setSelectedChat(chat);
+                    setSelectedChat({ ...chat, unread_count: chat.unread_count || 0 });
                     if (isMobileView) setShowChatList(false);
                   }}
                   className={`w-full px-4 py-3 flex items-center text-left hover:bg-light-blue/30 transition-all duration-200 ${
@@ -640,7 +645,7 @@ export default function Chat() {
                       {chat.last_message || `Start chatting in ${chat.business_name}`}
                     </p>
                   </div>
-                  {chat.unread_count > 0 && (
+                  {(chat.unread_count ?? 0) > 0 && (
                     <div className="ml-2 w-5 h-5 bg-neon-blue rounded-full flex items-center justify-center">
                       <span className="text-xs font-bold text-white">{chat.unread_count}</span>
                     </div>
@@ -693,7 +698,7 @@ export default function Chat() {
               {selectedChat.type === 'group' && selectedChat.members && (
                 <div className="flex items-center">
                   <div className="flex -space-x-2">
-                    {selectedChat.members.slice(0, 3).map((member, i) => (
+                    {selectedChat.members.slice(0, 3).map((member) => (
                       <div 
                         key={member.id}
                         className="w-7 h-7 rounded-full bg-light-blue/80 border-2 border-highlight-blue flex items-center justify-center overflow-hidden"
@@ -910,7 +915,7 @@ export default function Chat() {
           businesses={businesses}
           onClose={() => setShowNewChatModal(false)}
           onChatCreated={(chat) => {
-            setChatRooms(prev => [chat, ...prev]);
+            setChatRooms(prev => [{ ...chat, unread_count: (chat as ChatRoom & { unread_count: number }).unread_count ?? 0 }, ...prev]);
             setSelectedChat(chat);
             setShowNewChatModal(false);
             fetchChatRooms(); // Refresh chat list

@@ -25,6 +25,7 @@ interface Owner {
 
 interface BusinessWithOwner extends Business {
   owner: Owner | null;
+  memberCount?: number; // ✅ PATCH: add memberCount
 }
 
 export function BusinessManagement() {
@@ -37,8 +38,7 @@ export function BusinessManagement() {
   const fetchBusinesses = async () => {
     try {
       setLoading(true);
-      
-      // Fetch businesses with their owners
+
       const { data: businessData, error: businessError } = await supabase
         .from('businesses')
         .select(`
@@ -53,23 +53,24 @@ export function BusinessManagement() {
         .order('created_at', { ascending: false });
 
       if (businessError) throw businessError;
-      
-      // For each business, get the member count
-      const businessesWithMembers = await Promise.all((businessData as BusinessWithOwner[] || []).map(async (business) => {
+
+      const businessesWithMembers = await Promise.all((businessData || []).map(async (business) => {
         const { count, error: countError } = await supabase
           .from('business_members')
           .select('*', { count: 'exact', head: true })
           .eq('business_id', business.id);
-          
-        if (countError) console.error('Error getting member count:', countError);
-        
+
+        if (countError) {
+          console.error('Error getting member count:', countError);
+        }
+
         return {
           ...business,
           memberCount: count || 0
         };
       }));
-      
-      setBusinesses(businessesWithMembers || []);
+
+      setBusinesses(businessesWithMembers);
     } catch (error) {
       console.error('Error fetching businesses:', error);
       toast.error('Failed to load businesses');
@@ -104,12 +105,12 @@ export function BusinessManagement() {
   const BusinessRiskIndicator = ({ memberCount = 0 }: { memberCount?: number }) => {
     if (memberCount === 0) return null;
 
-    const riskClass = memberCount > 10 
-      ? 'bg-red-500/20 border-red-500/30 text-red-400' 
-      : memberCount > 5 
-        ? 'bg-yellow-500/20 border-yellow-500/30 text-yellow-400' 
+    const riskClass = memberCount > 10
+      ? 'bg-red-500/20 border-red-500/30 text-red-400'
+      : memberCount > 5
+        ? 'bg-yellow-500/20 border-yellow-500/30 text-yellow-400'
         : 'bg-green-500/20 border-green-500/30 text-green-400';
-        
+
     return (
       <div className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs ${riskClass}`}>
         <AlertCircle className="w-3.5 h-3.5" />
@@ -122,7 +123,7 @@ export function BusinessManagement() {
     <div className="bg-highlight-blue rounded-xl p-6 mt-8">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-semibold text-white">Business Management</h2>
-        <button 
+        <button
           onClick={handleRefresh}
           disabled={refreshing || loading}
           className="flex items-center gap-2 px-3 py-2 bg-light-blue hover:bg-highlight-blue rounded-lg transition-colors text-white text-sm disabled:opacity-50"
@@ -173,7 +174,7 @@ export function BusinessManagement() {
                         <p className="text-sm text-gray-400 mt-1">{business.description}</p>
                       )}
                       {business.website && (
-                        <a 
+                        <a
                           href={business.website}
                           target="_blank"
                           rel="noopener noreferrer"
