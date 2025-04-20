@@ -132,9 +132,10 @@ export default function BusinessPage() {
           user_id,
           role,
           joined_at,
-          profile:profiles(id, full_name, email, avatar_url)
+          profile:profiles!inner(id, full_name, email, avatar_url)
         `)
-        .eq('business_id', businessId);
+        .eq('business_id', businessId)
+        .single();
         
       if (membersError) throw membersError;
       
@@ -156,7 +157,7 @@ export default function BusinessPage() {
       }
       
       // Merge the business role data with the members data
-      const membersWithRoles = membersData ? membersData.map(member => {
+      const membersWithRoles = Array.isArray(membersData) ? membersData.map(member => {
         // Get business role from map or default to 'employee'
         const businessRole = businessRoleMap.get(member.user_id) || 'employee';
         
@@ -391,7 +392,7 @@ export default function BusinessPage() {
       if (!selectedBusiness) return;
       
       try {
-        const { data, error } = await supabase.rpc('update_business_role', {
+        const { error } = await supabase.rpc('update_business_role', {
           p_business_id: selectedBusiness.id,
           p_user_id: userId,
           p_role: newRole
@@ -451,7 +452,7 @@ export default function BusinessPage() {
                             {member.profile.avatar_url ? (
                               <img
                                 src={member.profile.avatar_url}
-                                alt={member.profile.full_name}
+                                alt={member.profile.full_name || 'Unnamed User'}
                                 className="w-full h-full object-cover"
                               />
                             ) : (

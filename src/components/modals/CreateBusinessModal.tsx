@@ -88,32 +88,13 @@ export function CreateBusinessModal({ onClose }: CreateBusinessModalProps) {
 
       if (businessError || !business) throw businessError;
 
-      const { data: ownerRole, error: roleError } = await supabase
-        .from('business_user_roles')
-        .select('id')
-        .filter('role', 'eq', 'owner::text')
-        .single();
-
-      if (roleError || !ownerRole) {
-        toast.error('Failed to assign owner role to creator.');
-        return;
-      }
-
-      const { error: memberError } = await supabase
-        .from('business_members')
-        .insert({
-          business_id: business.id,
-          user_id: user.id,
-          role_id: ownerRole.id
-        });
-
-      if (memberError) throw memberError;
+      // No need to manually insert into business_members – handled by backend logic
 
       toast.success('Business created successfully!');
       onClose();
     } catch (error) {
       console.error('Error creating business:', error);
-      toast.error('Failed to create business');
+      toast.error('Failed to create business. Please try again.');
     } finally {
       setLoading(false);
     }
