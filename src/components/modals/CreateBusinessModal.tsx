@@ -91,7 +91,7 @@ export function CreateBusinessModal({ onClose }: CreateBusinessModalProps) {
       const { data: ownerRole, error: roleError } = await supabase
         .from('business_user_roles')
         .select('id')
-        .eq('role', 'owner')
+        .eq('role', 'owner' as any)
         .single();
 
       if (roleError || !ownerRole) {
