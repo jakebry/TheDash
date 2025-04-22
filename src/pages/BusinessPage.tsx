@@ -100,7 +100,7 @@ export default function BusinessPage() {
 
   const fetchBusinessMembers = async (businessId: string) => {
     try {
-      // Fetch all business members with their profiles
+      // First fetch all business members with their profiles
       const { data: membersData, error: membersError } = await supabase
         .from('business_members')
         .select(`
@@ -110,35 +110,37 @@ export default function BusinessPage() {
           joined_at,
           profile:profiles(id, full_name, email, avatar_url)
         `)
-        .eq('business_id', businessId); // Removed any role-based restrictions
-
+        .eq('business_id', businessId);
+        
       if (membersError) throw membersError;
-
-      // Fetch business roles from the business_user_roles table
+      
+      // Next, get the business roles from business_user_roles table
       const { data: businessRolesData, error: businessRolesError } = await supabase
         .from('business_user_roles')
         .select('user_id, role')
         .eq('business_id', businessId);
-
+      
       if (businessRolesError) throw businessRolesError;
-
+      
       // Create a map of user_id to business role for quick lookup
       const businessRoleMap = new Map<string, string>();
+      
       if (businessRolesData) {
         businessRolesData.forEach(role => {
           businessRoleMap.set(role.user_id, role.role);
         });
       }
-
+      
       // Get the business creator's ID
       const { data: businessData } = await supabase
         .from('businesses')
         .select('created_by')
         .eq('id', businessId)
         .single();
-
+      
       // Merge the business role data with the members data
       const membersWithRoles = Array.isArray(membersData) ? membersData.map(member => {
+        // Get business role from map or default to 'employee'
         const businessRole = businessRoleMap.get(member.user_id) || 'employee';
         const isCreator = businessData?.created_by === member.user_id;
 
@@ -149,7 +151,7 @@ export default function BusinessPage() {
           is_creator: isCreator
         };
       }) : [];
-
+      
       setMembers(membersWithRoles);
     } catch (error) {
       console.error('Error fetching members:', error);
