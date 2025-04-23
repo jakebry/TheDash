@@ -2,19 +2,13 @@
   # Fix Business Member Policies and Role Checks
 
   1. Changes
-    - Fix infinite recursion in business member policies
     - Add safer role checking functions
-    - Update existing policies to avoid recursion
+    - Define new policies for business member visibility
     
   2. Security
     - Maintain proper access control
     - Use JWT claims for role checks
 */
-
--- Drop existing problematic policies
-DROP POLICY IF EXISTS "Members can view all members in their business" ON public.business_members;
-DROP POLICY IF EXISTS "Admins can view all business members" ON public.business_members;
-DROP POLICY IF EXISTS "Business owners can manage members" ON public.business_members;
 
 -- Create a function to safely check admin status using JWT
 CREATE OR REPLACE FUNCTION is_admin_direct()
@@ -30,7 +24,7 @@ EXCEPTION
 END;
 $$;
 
--- Create safer policies that avoid recursion
+-- Create safer policies
 
 -- Members can view all members in their business
 CREATE POLICY "Members can view all members in their business"
